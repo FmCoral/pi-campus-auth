@@ -1,0 +1,1164 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1"/>
+    <meta name="renderer" content="webkit"/>
+    <meta name="force-rendering" content="webkit"/>
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="generator" content="YTO MDM">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta content="user-scalable=no" name="viewport">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="renderer" content="webkit">
+    <title>ssov2</title>
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" media="screen"/>
+    <link href="css/common.min.css?v=20171215qq" rel="stylesheet" type="text/css"/>
+    <link href="css/ssologinv2.css?v=20170226qq" rel="stylesheet" type="text/css"/>
+    <link href="css/slider.css?v=20170226qq" rel="stylesheet" type="text/css"/>
+    <link href="css/layer.css" rel="stylesheet" type="text/css"/>
+    <link href="css/loginways.css" rel="stylesheet" type="text/css"/>
+    <script type="text/javascript" src="js/jquery-1.9.1.min.js"></script>
+    <script type="text/javascript" src="js/jquery-postmessage.min.js"></script>
+    <script type="text/javascript" src="./js/base64Util.js"></script>
+    <script type="text/javascript" src="./js/Cryptojs-3.1.2.js"></script>
+    <script type="text/javascript" src="./js/cims_encryptor.js"></script>
+    <script type="text/javascript" src="js/jsencrypt.js"></script>
+    <script type="text/javascript" src="js/CIMS-Web-Server-v3.js"></script>
+    <script type="text/javascript" src="js/layer.min.js"></script>
+    <script src="js/bootstrap.min.js?v=20170920qq"></script>
+    <script src="js/modernizr-2.8.3.min.js" type="text/javascript"></script>
+    <!--[if lte IE 9]>
+    <link href="css/ssoie8.css" rel="stylesheet" type="text/css" />
+    <script type="text/javascript"  src="js/jquery.placeholder.min.js"></script>
+    <script type="text/javascript" src="js/html5shiv.js"></script>
+    <script type="text/javascript" src="js/respond.min.js"></script>
+    <![endif]-->
+    <!--[if lte IE 8]>
+    <script type="text/javascript" src="js/ssoie8.js"></script>
+    <![endif]-->
+
+    <script type="text/javascript" src="js/ie11_compatible.js"></script>
+
+    <style>
+
+
+        .app-name {
+            font-style: normal;
+        }
+
+        .main .conlogin-leftout {
+            -webkit-transform: translateX(0%);
+            transform: translateX(0%);
+        }
+
+        .conlogin-leftout {
+            -webkit-transition: -webkit-transform 0.6s;
+            transition: transform 0.6s;
+        }
+
+        .conlogin-leftout {
+            float: left;
+            width: 700px;
+            height: 500px;
+            background: #FFFFFF;
+            z-index: 100;
+        }
+
+        @media (max-width: 1440px) {
+            #slider-wrap ul#slider li {
+                height: 450px;
+                background-size: 100% 100% !important;
+            }
+        }
+
+        .company span {
+            margin-top: 10px;
+            display: inline-block;
+            font-size: 16px;
+            padding: 3px 3px;
+            width: 200px;
+            border: 1px solid #D63031;
+            border-radius: 21px;
+            background: #FFFFFF;
+            color: #D63031;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .login-inputcutd span .countdown {
+            padding: 11px 0;
+        }
+
+        /* 对话框 */
+        .layui-layer {
+            border-radius: 5px;
+        }
+
+        .layui-layer-title {
+            background-color: #A72300;
+            color: white;
+        }
+
+        .company-lable {
+            margin-top: 10px;
+            margin-left: 27px;
+            width: 280px;
+            height: 32px;
+            font-size: 14px;
+            font-family: PingFangSC-Light;
+            font-weight: 300;
+            color: rgba(214, 48, 49, 1);
+            line-height: 18px;
+        }
+
+        .type2.otherways-login > p {
+            margin-bottom: 30px;
+        }
+        .type2.otherways-login .login-input span input {
+            margin: 8px 0px;
+        }
+
+        .type2.otherways-login .login-input span input.captcha {
+            width: 195px;
+        }
+
+        .type2 .captchacode {
+            width: 100px;
+            height: 44px;
+            vertical-align: middle;
+            margin-top: -4px;
+        }
+        input[type="text"], input[type="password"], input[type="button"], input[type="submit"], input[type="reset"], select, textarea,button {
+            -webkit-appearance: none;
+            -webkit-tap-highlight-color:rgba(255,255,255,0);
+        }
+        input:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0px 100px white inset;
+        }
+    </style>
+    <script>
+        window.onload = function() {
+            document.body.addEventListener('touchmove', function (e) {
+                e.preventDefault(); //阻止默认的处理方式(阻止下拉滑动的效果)
+            }, {passive: false});
+            // 阻止双击放大
+            var lastTouchEnd = 0;
+            document.addEventListener('touchstart', function(event) {
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
+            });
+            document.addEventListener('touchend', function(event) {
+                var now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, false);
+
+            // 阻止双指放大
+            document.addEventListener('gesturestart', function(event) {
+                event.preventDefault();
+            });
+
+        }
+    </script>
+</head>
+
+<body class="xd-ssov2body" style="position: relative">
+<input type="hidden" name="ctx" id="ctx" value="/cims"/>
+<input type="hidden" name="email" id="email" value=""/>
+<input type="hidden" name="mailSuffix" id="mailSuffix" value=""/>
+<input type="hidden" name="sign" id="sign" value=""/>
+<input type="hidden" name="parent" id="parent" value=""/>
+<input type="hidden" name="token" id="token" value=""/>
+<input type="hidden" name="username" id="username" value=""/>
+<input type="hidden" name="voiceCallTelNumber" id="voiceCallTelNumber" value=""/>
+<input type="hidden" name="doubleMobileVerify" id="doubleMobileVerify" value=""/>
+<input type="hidden" name="publicKey" id="publicKey" value=""/>
+<input type="hidden" name="encryptor" id="encryptor" value=""/>
+<input type="hidden" name="uuid" id="uuid" value=""/>
+
+<canvas id="ssov2login_bg"></canvas>
+<!--<div class="main-leftbk M_bg"></div>-->
+<!--<div class="main-rightbk M_bg"></div>-->
+<div style="padding-top: 10px;">
+    <div class="main-title" style="position: relative">
+        <div class="main-icon">
+            <img src="image/logo1.png" id="main-logo">
+        </div>
+        <div class="main-iconcontent">
+            <p id="sys-name"></p>
+        </div>
+        <!--<div class="btn_bind_qrcode ie8borderraidus">
+            <img src="image/icon_qrcode.png" alt="">
+            <span>扫一扫绑定</span>
+            <div class="bind_windows">
+                <p>用手机扫一扫<br>绑定“<i class="app-name"></i>”账号</p>
+                <img src="api/showloginqrcode" width="165" height="165" alt="">
+            </div>
+        </div>-->
+    </div>
+</div>
+<div class="main">
+    <div class="splitlayout close-right reset-layout" id="split-layout" style="width: 1100px;height: 500px;">
+        <div class="intro">
+            <div class="conlogin-leftout">
+                <div id="wrapper">
+                    <div id="slider-wrap">
+                        <ul id="slider">
+                            <li><img src="image/lunbo1.png" id="banner"></li>
+                            <!--<li data-url="image/lunbo2.png" style="background: url(image/lunbo2.png);"></li>-->
+                            <!--<li data-url="image/lunbo3.png" style="background: url(image/lunbo3.png);"></li>-->
+                        </ul>
+                        <div id="pagination-wrap">
+                            <ul>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="conlogin-rightout " id="policy1">
+                <div class="bk-dim"></div>
+                <div class="defultloginways" style="display: none">
+                    <!--扫码登录-->
+                    <div class="header">
+                        <p class="active">密码登录</p>
+                        <p class="code-title">扫码登录</p>
+                        <p class="sms-title">短信登录</p>
+                    </div>
+                    <div class="contents-box" style="text-align: center">
+                        <!--密码登录-->
+                        <form class="otherways-login tabs-content type2" id="loginways8" data-index="pwd" method="post">
+                            <div class="login-input">
+                                <span>
+                                    <input type="text" name="username" class="email-username"
+                                           placeholder="请输入邮箱/手机号/学工号">
+                                </span>
+                                    <span>
+                                    <input type="password" name="authcode" placeholder="请输入密码" autocomplete="off">
+                                </span>
+                                    <span class="mycode" style="display:none;">
+                                    <input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                    <img src="" class="captchacode">
+                                </span>
+                            </div>
+                            <button class="exeActionBtn ie8borderraidus">登录</button>
+                            <!-- <p class="forget-password">忘记密码?</p> -->
+                            <p><a href="javascript:void(0)" style="text-decoration: none;color: #42CABD;font-size: 12px;"
+                                  class="forgetPassword">忘记密码？</a></p>
+                        </form>
+                        <div class="otherways-login tabs-content" id="loginways0" data-index="8" style="display: none">
+                            <div class="login-input login-inputcode">
+                                <p>请使用“<i class="app-name"></i>”APP扫一扫登录</p>
+                                <img id="qrcodeImg1" src=""/>
+                            </div>
+                        </div>
+                        <form class="otherways-login tabs-content" id="loginways3" data-index="smsauth">
+                            <div class="login-input login-inputcutd">
+									<span style="position: relative;">
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号" style="left: 0;">
+										<span class="countdown bysms">发送短信</span>
+									</span>
+                                <span>
+										<input type="text" name="authcode" placeholder="请输入六位数短信验证码">
+									</span>
+                            </div>
+                            <button class="exeActionBtn ie8borderraidus">登录</button>
+                        </form>
+                    </div>
+                    <div class="moreways" id="moreways" style="text-align: center">
+                        <span class="ie8borderraidus">更多登录方式</span>
+                    </div>
+                </div>
+                <div class="loginways">
+                    <!--动态口令登录-->
+                    <div class="otherways-login tabs-content0" id="loginways2" data-index="dynpwd">
+                        <p>动态口令登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="text" name="authcode" class="app-name-placeholder"
+                                               placeholder="请输入“善认”app上的六位数动态口令">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </div>
+                    <!--人脸识别验证-->
+                    <div class="otherways-login tabs-content1" id="loginways6" data-index="faceauth">
+                        <p>人脸识别验证</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">发送人脸验证到App</button>
+                        <div class="login-mess-one">
+                            <p>打开您手机上的“<i class="app-name"></i>”App验证人脸信息</p>
+                        </div>
+                    </div>
+                    <!--声纹识别验证-->
+                    <div class="otherways-login tabs-content2" id="loginways7" data-index="voiceprintauth">
+                        <p>声纹识别验证</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">发送声纹验证到App</button>
+                        <div class="login-mess-one">
+                            <p>打开您手机上的“<i class="app-name"></i>”App验证声纹信息</p>
+                        </div>
+                    </div>
+                    <!--一键登录-->
+                    <div class="otherways-login tabs-content3" id="loginways1" data-index="akey">
+                        <p>一键登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">发送一键登录到App</button>
+                        <div class="login-mess-one">
+                            <p>打开您手机上的“<i class="app-name"></i>”App一键登录<span data-id="serialNumber"></span></p>
+                        </div>
+                    </div>
+                    <!--短信验证-->
+                    <form class="otherways-login tabs-content4" id="loginways3" data-index="smsauth">
+                        <p>短信验证</p>
+                        <div class="login-input login-inputcutd">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+										<span class="countdown bysms">发送短信</span>
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入六位数短信验证码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+                    <!--语音验证-->
+                    <div class="otherways-login tabs-content5" id="loginways4" data-index="voiceauth">
+                        <p>语音验证</p>
+                        <div class="login-input login-inputcutd">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+										<span class="countdown byPhone">发送语音</span>
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入语音验证码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </div>
+                    <!--临时授权码登录-->
+                    <form class="otherways-login tabs-content" id="loginways5" data-index="tempauthcode">
+                        <p>临时授权码登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入临时授权码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+                    <!--微信登录-->
+                    <div class="otherways-login tabs-content" id="loginways9" data-index="7">
+                        <p>微信验证</p>
+                        <div class="login-input login-inputcode login-inputwechat">
+                            <p>打开微信二维码后，使用“微信”扫一扫登录</p>
+                            <img src="image/weichat.png"/>
+                            <div class="moreways">
+                                <a href="" class="weixinUrl ie8borderraidus" target="_blank" rel="opener referrer">打开微信二维码 &gt;</a>
+                            </div>
+                        </div>
+                    </div>
+                   <!-- &lt;!&ndash;扫码登录&ndash;&gt;
+                    <div class="otherways-login tabs-content" id="loginways0" data-index="8">
+                        <p>扫码登录</p>
+                        <div class="login-input login-inputcode">
+                            <p>请使用“<i class="app-name"></i>”APP扫一扫登录门户</p>
+                            <img id="qrcodeImg1" src=""/>
+                        </div>
+                    </div>-->
+                    <!--密码登录-->
+                    <!--<form class="otherways-login tabs-content type2" id="loginways8" data-index="pwd" method="post">
+                        <p>密码登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+								<input type="password" name="authcode" placeholder="请输入密码" autocomplete="off">
+							</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+	                            <img src="" class="captchacode">
+							</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                        &lt;!&ndash; <p class="forget-password">忘记密码?</p> &ndash;&gt;
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                    </form>-->
+
+                </div>
+            </div>
+            <div class="conlogin-rightout conlogin-rightout-display" id="policy2">
+                <div class="loginways">
+                    <p>双因子认证</p>
+                    <!--动态口令登录-->
+                    <div class="otherways-login tabs-content0 type2" id="loginways_1_2" data-index="dynpwd">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                            <span>
+										<input type="text" name="vericode" class="app-name-placeholder"
+                                               placeholder="请输入“善认”app上的六位数动态口令">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                    </div>
+                    <!--人脸识别验证-->
+                    <div class="otherways-login tabs-content1 type2" id="loginways_1_6" data-index="faceauth">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                        </div>
+                        <button class="verifition">验证</button>
+                        <button class="exeActionBtn ie8borderraidus verisend">发送人脸验证到App</button>
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                        <div class="login-mess">
+                            <p><span data-id="serialNumber"></span>请打开<i class="app-name"></i>App进行人脸验证...</p>
+                        </div>
+                    </div>
+                    <!--声纹识别验证-->
+                    <div class="otherways-login tabs-content2 type2" id="loginways_1_7" data-index="voiceprintauth">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                        </div>
+                        <button class="verifition">验证</button>
+                        <button class="exeActionBtn ie8borderraidus verisend">发送声纹验证到App</button>
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                        <div class="login-mess">
+                            <p><span data-id="serialNumber"></span>请打开<i class="app-name"></i>App进行声纹验证...</p>
+                        </div>
+                    </div>
+                    <!--一键登录-->
+                    <div class="otherways-login tabs-content3 type2" id="loginways_1_1" data-index="akey">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                        </div>
+                        <button class="verifition">验证</button>
+                        <button class="exeActionBtn ie8borderraidus verisend">发送一键登录到App</button>
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                        <div class="login-mess">
+                            <p><span data-id="serialNumber"></span>请打开供销卫士App进行一键登录...</p>
+                        </div>
+                    </div>
+                    <!--短信验证-->
+                    <form class="otherways-login tabs-content type2" id="loginways_1_3" data-index="pwd3" method="POST">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码" autocomplete="off">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                            <div class="policy-div-code">
+                                <input type="text" name="vericode" placeholder="请输入短信验证码" class="policy-code-input ">
+                                <input type="button" name="send" value="获取验证码" class="policy-code-send " id="pwd1">
+                            </div>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                        <!-- <p class="forget-password">忘记密码?</p> -->
+                    </form>
+                    <!--语音验证-->
+                    <div class="otherways-login tabs-content5 type2" id="loginways_1_4" data-index="pwd2">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                            <div class="policy-div-code">
+                                <input type="text" name="vericode" placeholder="请输入语音验证码" class="policy-code-input ">
+                                <input type="button" value="发送语音" class="policy-code-send" id="phone1">
+                            </div>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                    </div>
+                    <!--临时授权码登录-->
+                    <form class="otherways-login tabs-content" id="loginways_1_5" data-index="tempauthcode">
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入临时授权码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+
+                </div>
+            </div>
+            <div class="otherways">
+                <div class="go-backpage">
+                    <span></span>
+                </div>
+                <div class="otherways-content">
+                    <!--扫码登录-->
+                    <!--<div class="otherways-login tabs-content0" id="otherways0" data-index="8">
+                        <p>扫码登录</p>
+                        <div class="login-input login-inputcode">
+                            <p>请使用“<i class="app-name"></i>”APP扫一扫登录门户</p>
+                            <img id="qrcodeImg2" src=""/>
+                        </div>
+                    </div>-->
+                    <!--一键登录-->
+                    <div class="otherways-login tabs-content1" id="otherways1" data-index="akey">
+                        <p>一键登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">发送一键登录到App</button>
+                        <div class="login-mess-one">
+                            <p>打开您手机上的“<i class="app-name"></i>”App一键登录<span data-id="serialNumber"></span></p>
+                        </div>
+                    </div>
+                    <!--动态口令登录-->
+                    <form class="otherways-login tabs-content2" id="otherways2" data-index="dynpwd">
+                        <p>动态口令登录</p>
+                        <p class="error-message"><span class="error-icon"></span>登录失败，请下载 “<i class="app-name"></i>”app
+                            并绑定用户</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="text" name="authcode" class="app-name-placeholder"
+                                               placeholder="请输入“善认”app上的六位数动态口令">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+                    <!--短信验证-->
+                    <form class="otherways-login tabs-content3" id="otherways3" data-index="smsauth">
+                        <p>短信验证</p>
+                        <div class="login-input login-inputcutd">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+										<span class="countdown bysms">发送短信</span>
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入六位数短信验证码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+                    <!--语音验证-->
+                    <form class="otherways-login tabs-content4" id="otherways4" data-index="voiceauth">
+                        <p>语音验证</p>
+                        <div class="login-input login-inputcutd">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+										<span class="countdown byPhone">发送语音</span>
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入语音验证码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+                    <!--临时授权码登录-->
+                    <form class="otherways-login tabs-content5" id="otherways5" data-index="tempauthcode">
+                        <p>临时授权码登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="text" name="authcode" placeholder="请输入临时授权码">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">登录</button>
+                    </form>
+                    <!--人脸识别验证-->
+                    <form class="otherways-login tabs-content6" id="otherways6" data-index="faceauth">
+                        <p>人脸识别验证</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">发送人脸验证到App</button>
+                        <div class="login-mess-one">
+                            <p>打开您手机上的“<i class="app-name"></i>”App验证人脸信息</p>
+                        </div>
+                    </form>
+                    <!--声纹识别验证-->
+                    <div class="otherways-login tabs-content7" id="otherways7" data-index="voiceprintauth">
+                        <p>声纹识别验证</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus">发送声纹验证到App</button>
+                        <div class="login-mess-one">
+                            <p>打开您手机上的“<i class="app-name"></i>”App验证声纹信息</p>
+                        </div>
+                    </div>
+                    <!--密码登录-->
+                    <!--<form class="otherways-login tabs-content8 type2" id="otherways8" data-index="pwd" method="post">
+                        <p>密码登录</p>
+                        <div class="login-input">
+									<span>
+										<input type="text" name="username" class="email-username"
+                                               placeholder="请输入邮箱/手机号/学工号">
+									</span>
+                            <span>
+										<input type="password" name="authcode" placeholder="请输入密码" autocomplete="off">
+									</span>
+                            <span class="mycode" style="display:none;">
+								<input class="captcha" type="text" name="verificationcode" placeholder="请输入验证码" autocomplete="off">
+                                <img src="" class="captchacode">
+							</span>
+                        </div>
+                        <button class="exeActionBtn ie8borderraidus" type="submit">登录</button>
+                        &lt;!&ndash; <p class="forget-password">忘记密码?</p> &ndash;&gt;
+                        <p><a href="javascript:void(0)" style="text-decoration: none;color: #53D3C8;font-size: 12px;"
+                              class="forgetPassword">忘记密码？</a></p>
+                    </form>-->
+                    <!--微信登录-->
+                    <div class="otherways-login tabs-content9" id="otherways9" data-index="7">
+                        <p>微信验证</p>
+                        <div class="login-input login-inputcode login-inputwechat">
+                            <p>打开微信二维码后，使用“微信”扫一扫登录</p>
+                            <img src="image/weichat.png"/>
+                            <div class="moreways">
+                                <a href="" class="weixinUrl ie8borderraidus" target="_blank" rel="opener referrer">打开微信二维码 &gt;</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="otherways-button">
+                    <!--微信-->
+                    <div class="button-content" id="otherwaysButton9" data-index="9">
+                        <span></span>
+                        <div class="login-icon login-iconwechatde">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>微信</p>
+                    </div>
+                    <!--扫码-->
+                    <!--<div class="button-content" id="otherwaysButton0" data-index="0">
+                        <span></span>
+                        <div class="login-icon login-iconscande">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>扫码登录</p>
+                    </div>-->
+                    <!--APP一键-->
+                    <div class="button-content" id="otherwaysButton1" data-index="1">
+                        <span></span>
+                        <div class="login-icon login-iconapponede">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>APP一键登录</p>
+                    </div>
+                    <!--动态口令按钮-->
+                    <div class="button-content" id="otherwaysButton2" data-index="2">
+                        <span></span>
+                        <div class="login-icon login-icondynade">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>动态口令</p>
+                    </div>
+                    <!--短信-->
+                    <div class="button-content" id="otherwaysButton3" data-index="3">
+                        <span></span>
+                        <div class="login-icon login-iconmessde">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>短信</p>
+                    </div>
+                    <!--语音登录-->
+                    <div class="button-content" id="otherwaysButton4" data-index="4">
+                        <span></span>
+                        <div class="login-icon login-iconvoicede">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>语音登录</p>
+                    </div>
+                    <!--临时授权-->
+                    <div class="button-content" id="otherwaysButton5" data-index="5">
+                        <span></span>
+                        <div class="login-icon login-icontempde">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>临时授权</p>
+                    </div>
+                    <!--人脸识别按钮-->
+                    <div class="button-content" id="otherwaysButton6" data-index="6">
+                        <span></span>
+                        <div class="login-icon login-iconfacede">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>人脸识别</p>
+                    </div>
+                    <!--声纹-->
+                    <div class="button-content" id="otherwaysButton7" data-index="7">
+                        <span></span>
+                        <div class="login-icon login-iconvocalde">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>声纹识别</p>
+                    </div>
+                    <!--密码登录-->
+                    <!--<div class="button-content" id="otherwaysButton8" data-index="8">
+                        <span></span>
+                        <div class="login-icon login-iconpwdde">
+                            <div class="login-img ie8borderraidus"></div>
+                        </div>
+                        <p>密码登录</p>
+                    </div>-->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    //动画初始化
+    $(document).ready(function () {
+        //H5适配，检查navigator参数中是否携带移动端因素
+        $(".code-title").show();
+        $(".sms-title").hide();
+        var h5Adapter = /Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent);
+        if(h5Adapter){
+
+            //去除登陆界面图片框
+            $(".conlogin-leftout").css("display","none");
+            $(".main").css("width", '87.2%');
+            $(".main").css("height", '400px');
+            $(".main").css("margin", 'auto');
+            $(".main").css("left", '0');
+            $(".main").css("right", '0');
+            $(".main").css("top", '0');
+            $(".main").css("bottom", '0');
+            $(".main").css("position", 'fixed');
+            $(".defultloginways .moreways").hide();
+            $(".code-title").hide();
+            // $(".sms-title").show();
+            $(".sms-title").hide();
+            $('.defultloginways .header p').css({"width": '90%'});
+            $(".intro .otherways").css({"width" : 410,"right" : -408});
+            $(".intro .otherways .otherways-button").css({"width" : 420,"margin-left" : 10});
+            $(".login-inputcutd span .countdown").css("left",'auto');
+            $('#main-logo').attr('src',"image/app-logo.png");
+            var head = document.getElementsByTagName('head')[0];
+            var link = document.createElement('link');
+            link.type='text/css';
+            link.rel = 'stylesheet';
+            // link.media = "screen";//打印的css(显示于屏幕的css---->media="screen")
+            link.href = 'css/app_style.css';//文件的真实路径(eg:link.href = "css/A4print.css"; )
+            head.appendChild(link);
+        }
+
+        function initshow() {
+            var starAnimObj = {};
+            starAnimObj.canvasElement = null;
+            starAnimObj.starArr = [];
+            starAnimObj.nums = 200; //星星初始化数量
+            starAnimObj.linesArr = [];
+            starAnimObj.cxt = null;
+            starAnimObj.newLine = true;
+            starAnimObj.center = 0;
+            starAnimObj.interval = null;
+
+            starAnimObj.initStar = function () {
+                if (starAnimObj.starArr.length === 0) {
+                    for (var i = 0; i < starAnimObj.nums; i++) {
+                        var array = ["t", "f"];
+                        var r = Math.random() * 1; //生成星星的半径
+                        var ax = Math.random() * starAnimObj.canvasElement.width;
+                        var ay = Math.random() * starAnimObj.canvasElement.height;
+                        var opactityS = Math.random() * 1;
+                        opactityS = opactityS > 0.7 ? 0.7 : opactityS;
+                        var trues = array[Math.floor(Math.random() * 2)];
+
+                        starAnimObj.starArr.push({
+                            x: ax,
+                            y: ay,
+                            R: r,
+                            initX: ax,
+                            initY: ay,
+                            moves: trues,
+                            initOpacity: opactityS,
+                            opacity: opactityS
+                        });
+                    }
+                }
+            };
+
+            starAnimObj.drawLine = function () {
+                if (starAnimObj.newLine === true) {
+                    var lineNum = Math.ceil(Math.random() * 2);
+                    starAnimObj.linesArr = [];
+                    for (var i = 0; i < lineNum; i++) {
+                        var lx = Math.random() * starAnimObj.canvasElement.width;
+                        var ly = Math.random() * starAnimObj.canvasElement.height - Math.random() * 500;
+                        starAnimObj.linesArr.push({
+                            initX: lx,
+                            initY: 0,
+                            length: Math.random() * 50 + 30,
+                            speed: Math.random() * 10
+                        });
+                    }
+                    starAnimObj.newLine = false;
+                }
+            };
+
+            starAnimObj.draw = function () {
+                if (starAnimObj.canvasElement === null) {
+                    return;
+                }
+
+                var cxt = starAnimObj.cxt;
+                var canvasElement = starAnimObj.canvasElement;
+                var starArr = starAnimObj.starArr;
+                var linesArr = starAnimObj.linesArr;
+
+                cxt.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                var colors = cxt.createLinearGradient(0, 0, 0, canvasElement.height);
+
+                colors.addColorStop(0, "#000428");
+                colors.addColorStop(1, "#004e92");
+                cxt.fillStyle = colors;
+
+                cxt.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+                for (var i = 0; i < starAnimObj.starArr.length; i++) {
+                    var child = starArr[i];
+                    cxt.save();
+                    cxt.globalAlpha = child.opacity;
+                    cxt.beginPath();
+                    cxt.fillStyle = "#ffffff";
+                    cxt.arc(child.initX, child.initY, child.R, 0, Math.PI * 2, false);
+                    cxt.fill();
+                    cxt.closePath();
+                    //移动
+
+                    if (child.moves == 't') {
+                        child.initX -= Math.random() * 1 * 0.12; //星星移动的速度
+                        if (child.initX < 0) {
+                            child.initX = child.x;
+                        }
+                    }
+                    //透明度
+                    if (child.opacity < 0.8) {
+                        child.opacity += 0.005;
+                        if (child.opacity > 0.7) {
+                            child.opacity = child.initOpacity;
+                        }
+                    }
+                    cxt.restore();
+                }
+
+                starAnimObj.drawLine();
+
+                for (var j = 0; j < linesArr.length; j++) {
+                    var child2 = linesArr[j];
+                    cxt.save();
+                    cxt.rotate(0);
+                    cxt.beginPath();
+                    cxt.strokeStyle = "#28509a";
+                    cxt.moveTo(child2.initX, child2.initY);
+                    cxt.lineTo(child2.initX - Math.cos(Math.PI / 180 * 45) * child2.length, child2.initY + Math.sin(Math.PI / 180 * 45) * child2.length);
+                    cxt.stroke();
+                    cxt.restore();
+                    child2.speed += 0.1;
+                    var preX = Math.cos(Math.PI / 180 * 45) * child2.speed;
+                    var preY = Math.sin(Math.PI / 180 * 45) * child2.speed;
+                    child2.initX = child2.initX - preX;
+                    child2.initY = child2.initY + preY;
+                    if (child2.initX < 0 || child2.initY > canvasElement.height) {
+                        starAnimObj.center = j + 1;
+                    }
+                    if (starAnimObj.center == linesArr.length) {
+                        starAnimObj.center = 0;
+                        starAnimObj.newLine = true;
+                    }
+
+                }
+            };
+
+            starAnimObj.refresh = function (elementId) {
+                if (!starAnimObj.canvasSupport()) {
+                    return;
+                }
+                if (starAnimObj.elementId && starAnimObj.elementId === elementId) {
+                    starAnimObj.canvasElement = document.getElementById(starAnimObj.elementId);
+                    if (starAnimObj.canvasElement === null) {
+                        starAnimObj.stopAnimation();
+                        return;
+                    }
+                    starAnimObj.cxt = starAnimObj.canvasElement.getContext("2d");
+                    starAnimObj.canvasElement.width = window.innerWidth;
+                    starAnimObj.canvasElement.height = window.innerHeight;
+                    starAnimObj.draw();
+                } else {
+                    starAnimObj.initAppCanvasBg(elementId);
+                }
+                starAnimObj.startAnimation();
+            };
+
+            starAnimObj.canvasSupport = function () {
+                return Modernizr.canvas;
+            };
+            starAnimObj.startAnimation = function () {
+                var mySelf = starAnimObj;
+                starAnimObj.stopAnimation();
+                if (starAnimObj.interval === null) {
+                    starAnimObj.interval = setInterval(function () {
+                        mySelf.draw();
+                    }, 20);
+                    // 显示元素
+                    if (starAnimObj.canvasElement !== null) {
+                        starAnimObj.canvasElement.style.visibility = "visible";
+                    }
+                }
+            };
+
+            starAnimObj.stopAnimation = function () {
+                clearInterval(starAnimObj.interval);
+                starAnimObj.interval = null;
+                // 隐藏元素
+                if (starAnimObj.canvasElement !== null) {
+                    starAnimObj.canvasElement.style.visibility = "hidden";
+                }
+            };
+
+            starAnimObj.initAppCanvasBg = function (elementId) {
+                if (!starAnimObj.canvasSupport()) {
+                    return;
+                }
+                starAnimObj.elementId = elementId;
+                starAnimObj.canvasElement = document.getElementById(elementId);
+                if (starAnimObj.canvasElement === null) {
+                    return;
+                }
+
+                starAnimObj.cxt = starAnimObj.canvasElement.getContext("2d");
+                starAnimObj.canvasElement.width = window.innerWidth;
+                starAnimObj.canvasElement.height = window.innerHeight;
+                starAnimObj.initStar();
+            };
+            // 添加监听事件
+            var canvasElementJq = $("#ssov2login_bg");
+            canvasElementJq.on("loginAnimRefresh", function (e, p) {
+                // 判断是否应该播放动画的逻辑
+                var appDiv = $("div.app-main");
+                var loginFlag = $("span#loginFlag");
+                if ((appDiv !== undefined && appDiv.length > 0) && (loginFlag === undefined || loginFlag.length === 0)) {
+                    // 不启动动画
+                    return;
+                }
+                if (!p) {
+                    p = "ssov2login_bg";
+                }
+                starAnimObj.refresh(p);
+            });
+            canvasElementJq.on("loginAnimStop", function (e, p) {
+                if (starAnimObj && (p === starAnimObj.elementId)) {
+                    starAnimObj.stopAnimation();
+                } else if (p !== starAnimObj.elementId) {
+                    var canvasElement = document.getElementById(p);
+                    if (canvasElement !== null) {
+                        canvasElement.style.visibility = "hidden";
+                    }
+                }
+            });
+            canvasElementJq.on("loginAnimInit", function (e, p) {
+                if (!p) {
+                    p = "ssov2login_bg";
+                }
+                starAnimObj.initAppCanvasBg(p);
+            });
+            // 开始动画
+            starAnimObj.initAppCanvasBg("ssov2login_bg");
+            starAnimObj.refresh("ssov2login_bg");
+            var login_bg1 = document.getElementById('ssov2login_bg');
+            login_bg1.style.width = '100%';
+//				login_bg1.style.height = '100%';
+            var H2 = document.body.offsetHeight || document.documentElement.offsetHeight;
+            login_bg1.style.height = H2 + 'px';
+        };
+        //initshow()
+    })
+    // $(document).resize(function() {
+    // 	initshow()
+    // });
+</script>
+<script type="text/javascript">
+    /*点击下载善认app显示下载内容*/
+    $(".main-title.mail-rightskyp .main-iconcontent>p").on("click", function () {
+        $(this).parents(".mail-rightskyp").find(".down-apppage").show();
+    });
+    /*点击下载安装善认app × 号*/
+    $(".down-apppage .go-backpage>span").on("click", function () {
+        $(this).parents(".down-apppage").hide();
+    });
+    /*更多验证方式*/
+    $(".moreways span").on("click", function () {
+        $(this).parents(".main").addClass("open-right");
+        $(".conlogin-rightout").addClass("conlogin-rightout1");
+        $(this).parents(".moreways").hide();
+    });
+    /*点击验证方式的按钮切换内容*/
+    $(".login-icon .login-img").on("click", function () {
+        $(this).parents(".button-content").siblings().find("p").hide();
+        $(this).parent(".login-icon").addClass("login-iconmo").parents(".button-content").siblings().find(".login-icon").removeClass("login-iconmo");
+        var index = $(this).parents(".button-content").attr("data-index");
+        $(this).parents(".button-content").addClass('active').siblings().removeClass('active');
+        /*显示登录输入内容对应的内容*/
+        $(this).parents(".otherways").find(".otherways-content .tabs-content" + index).addClass('active').siblings().removeClass('active');
+    });
+    $(".login-icon .login-img").on("mouseover", function () {
+        $(this).parents(".button-content").find("p").show();
+    }).on("mouseleave", function () {
+        var isactive = $(this).parents(".button-content").hasClass("active");
+        $(this).parents(".button-content").find("p").hide();
+        if (isactive == true) {
+            $(this).parents(".button-content").find("p").show();
+        }
+    });
+    /*返回上一页*/
+    $(".otherways .go-backpage>span").on("click", function () {
+        $(this).parents(".main").removeClass("open-right");
+        $(".conlogin-rightout").removeClass("conlogin-rightout1");
+        $(".moreways").show();
+        setTimeout(function () {
+            $("#wrapper").removeClass("wrapper");
+        }, 180);
+    });
+
+
+    $(".btn_bind_qrcode").click(function (e) {
+        $(".btn_bind_qrcode .bind_windows").toggle();
+        e.stopPropagation();
+    });
+
+    $(document).click(function (e) {
+        $(".btn_bind_qrcode .bind_windows").hide();
+    });
+
+</script>
+<script type="text/javascript">
+    /*$(".forgetPassword").on("click",function () {
+        var forgetPassword_layer =  layer.open({
+            title: false,
+            closeBtn: 0,
+            type: 2,
+            scrollbar: false,
+            area:['540px','450px'],
+            shade: [0.8, '#3f3f3f'],
+            anim: 2,
+            content: ['reset_pwd.html']
+        });
+    })*/
+    $('.forgetPassword').click(function () {
+        var params = window.location.href.split("?");
+        params = params.length > 1 ? params[1] : "";
+        $(location).attr('href', './reset_pwd.html?' + params);
+    })
+
+
+</script>
+</body>
+
+</html>

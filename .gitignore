@@ -1,0 +1,24 @@
+# === 敏感配置（真实账号密码，切勿提交）===
+auto_auth.conf
+*.conf
+!*.conf.example
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# === 日志与临时文件 ===
+*.log
+*.tmp
+*.bak
+*.old
+
+# === 系统 / IDE ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

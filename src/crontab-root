@@ -1,0 +1,2 @@
+* * * * * /root/auto_auth.py >> /root/auto_auth.log 2>&1
+30 4 * * * [ $(stat -c%s /root/auto_auth.log 2>/dev/null || echo 0) -gt 200000 ] && echo > /root/auto_auth.log
