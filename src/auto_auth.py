@@ -13,7 +13,8 @@ import subprocess, base64, tempfile, os, sys, time, uuid
 
 # 凭据配置文件路径（部署时与脚本同目录 /root）
 CONF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auto_auth.conf')
-PROBE_HOST = "8.8.8.8"
+# 多探测目标：任一通则视为在线（8.8.8.8 在部分校园网会被封，故用国内 DNS 为主）
+PROBE_HOSTS = ["223.5.5.5", "119.29.29.29", "8.8.8.8"]
 PROBE_TIMEOUT = 3  # ping 超时秒数
 
 
@@ -94,15 +95,18 @@ def rsa_encrypt(public_key_b64, plaintext):
 
 
 def is_online():
-    """探测 eth0 是否还能上网：ping 公网 IP 通则在线"""
-    try:
-        r = subprocess.run(
-            ['ping', '-c', '1', '-W', str(PROBE_TIMEOUT), PROBE_HOST],
-            capture_output=True, timeout=PROBE_TIMEOUT + 3
-        )
-        return r.returncode == 0
-    except Exception:
-        return False
+    """探测是否还能上网：任一探测目标 ping 通则在线"""
+    for host in PROBE_HOSTS:
+        try:
+            r = subprocess.run(
+                ['ping', '-c', '1', '-W', str(PROBE_TIMEOUT), host],
+                capture_output=True, timeout=PROBE_TIMEOUT + 3
+            )
+            if r.returncode == 0:
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def log(msg):

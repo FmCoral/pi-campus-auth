@@ -471,6 +471,61 @@ sh /etc/firewall.ttl.sh          # 立即生效，不断网
 
 验证脚本见 [verify_ttl.py](../src/verify_ttl.py)。
 
+## 2.17 OLED 状态屏 + 按设备流量统计（可选扩展）
+
+### 硬件与接线
+
+0.96 寸 SSD1306 12864 I2C OLED（地址 0x3C），接树莓派排针：
+
+| OLED | 树莓派物理引脚 | 说明 |
+|------|--------------|------|
+| VCC | 引脚 1 | 3.3V |
+| GND | 引脚 9 | GND |
+| SDA | 引脚 3 | GPIO2（硬件 I2C） |
+| SCL | 引脚 5 | GPIO3 |
+
+启用硬件 I2C（/boot/config.txt 加 `dtparam=i2c_arm=on`，ImmortalWrt 在 `/etc/config/system` 或 boot 分区配置），装 `python3` 即可，驱动纯标准库（fcntl + os.write /dev/i2c-1），无需 smbus。
+
+> 注意：普通 12864 模块需 9 个 SCL 脉冲解锁被卡死的 I2C 总线；接线务必核对引脚号（插 1/3/5/9 排曾因看错排导致全线拉低假 ACK）。
+
+### 屏幕显示（三页轮换，每页 1 秒，0.5 秒刷新率）
+
+- 页1 网络：`L:` 接入终端数、`U:/D:` 实时上传/下载速度（0.5s 采样）、累计流量
+- 页2 系统：`NET:` 校园网连通 T/F（ping 223.5.5.5）、CPU 温度、内存、CPU 占用
+- 页3 设备：每台接入设备的 hostname + 累计流量（下载+上传）
+
+### 按设备流量记账原理（nlbwmon 方案被否决）
+
+先装了 nlbwmon，实测**与 flow offloading 不兼容**：开启软/硬分载后 conntrack 计数恒为 0，nlbwmon 永远空表；关闭 offload 后其 netlink 通道在该内核（6.12）仍不产数据，放弃。
+
+最终方案 **nftables 命名计数器**，全自动对账：
+
+1. OLED 守护进程每 5 秒读 `/tmp/dhcp.leases`，为每个租约 IP 在独立表 `inet hwacct` 建 `up_<IP十六进制>` / `down_<IP十六进制>` 计数器 + forward 钩子规则；租约消失则删除
+2. 读计数器差值，按 **MAC** 累计（设备换 IP 不丢账），写 `/root/traffic_state.json`（含计数器基准值，重启不重复计数）
+3. 每 10 分钟追加一行设备快照到 `/root/traffic_log/YYYY-MM-DD.txt`（按天分文件）
+
+```sh
+# 部署（脚本见 src/oled_status.py）
+scp src/oled_status.py root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "tr -d '\r' < /tmp/oled_status.py > /root/oled_status.py; chmod +x /root/oled_status.py"
+# procd 服务（开机自启 + 崩溃 respawn），/etc/init.d/oled：
+#   procd_set_param command /usr/bin/python3 /root/oled_status.py
+#   procd_set_param respawn 3600 5 5
+/etc/init.d/oled enable && /etc/init.d/oled start
+```
+
+**代价**：按设备计数要求流量走软件转发，必须保持 `flow_offloading=0`（见 2.16 前提）。树莓派 4B 软转发对 3~5 个终端的日常流量完全够用；若追求千兆线速可删除 OLED 的对账逻辑后重新打开 offload。
+
+### 查看设备流量
+
+```sh
+cat /root/traffic_state.json                       # 实时累计（按 MAC）
+cat /root/traffic_log/2026-09-26.txt               # 当天历史快照
+nft list counters                                  # 原始计数器
+```
+
+> 应用级归属（"抖音用了多少"）受 HTTPS 加密限制只能按域名/SNI 近似推断，本项目不做。
+
 ---
 
 # 第三部分：踩坑大全
@@ -543,8 +598,20 @@ sh /etc/firewall.ttl.sh          # 立即生效，不断网
 | `route` 链不支持 | 报 "Chain of type route is not supported"，改用 **filter** 类型挂 postrouting |
 | 花括号被本地 shell 吞 | 含 `{ }` 的整条 nft 规则用引号包成一个参数：`nft 'add chain ... { ... }'` |
 | 独立表更稳 | TTL 规则放单独表 `ip ttlfix`，fw4 reload 时不会被清掉 |
+| `fwd` 是链名保留字 | `nft add chain inet x fwd` 报 syntax error，换名字（如 `acct`）即可，报错很隐晦 |
+| nft 子命令静默失败 | 脚本里 nft 报错只写 stderr，OLED 守护进程曾因链没建成而"看起来正常"；排查用 `nft list table` 看实际生效内容 |
+| nlbwmon 与 offload 不兼容 | 开 flow_offloading 后 conntrack 字节恒 0，nlbwmon 永远空表；关掉 offload 后其 netlink 通道在 6.12 内核仍不产数据，最终改用自建命名计数器 |
 
-## 3.6 无线类
+## 3.7 Python / I2C 类
+
+| 坑 | 说明 |
+|----|------|
+| `name[3:]` 式硬编码偏移 | `up_` 是 3 字符、`down_` 是 5 字符，统一 `[3:]` 会留下 `n_xxx` 脏键 → 后续 `fromhex()` 抛 ValueError → 被 main 的 except 吞掉变成静默死循环。教训：解析要按前缀分支；守护进程的异常不能全吞，要留 stderr |
+| `tr -d '\r' < f > f` 自截断 | 重定向先清空文件，tr 读到空。必须输出到另一个文件再 mv |
+| I2C 总线假 ACK | 总线被拉低时扫描任何地址都"有 ACK"；先看 `i2cdetect` 前置条件（总线空闲电平应为高）再信结果 |
+| 屏幕全黑排查顺序 | ① 接线引脚号（看错排会全低电平）② 供电 ③ 9 时钟脉冲解锁总线 ④ 数据路径（强制全亮 vs 写显存分段测试） |
+
+## 3.8 无线类
 
 - sta+AP 并发必崩（见 2.15），别反复尝试浪费时间
 - 树莓派 4B BCM43455 不支持 WPA3/SAE，连热点用 WPA2-PSK
@@ -634,6 +701,7 @@ ssh root@192.168.1.1 "tail -20 /root/auto_auth.log"
 | src/hotplug-routes.sh | 树莓派 `/etc/hotplug.d/iface/99-routes` | 路由持久化 |
 | src/firewall.ttl.sh | 树莓派 `/etc/firewall.ttl.sh` | TTL 伪装脚本 |
 | src/verify_ttl.py | 树莓派 `/tmp/` | TTL 伪装验证脚本 |
+| src/oled_status.py | 树莓派 `/root/oled_status.py` | OLED 状态屏守护进程 + 按设备流量记账 |
 | tools/probe.py ~ probe3.py | 不部署 | 逆向调试版（11 步 + 诊断输出） |
 | tools/probe_logout.py、test_eth0_sso.py | 不部署 | 下线/链路探测实验脚本 |
 | reference/CIMS.js 等 JS | 不部署 | 逆向用前端源码（证据留存） |
@@ -649,4 +717,5 @@ ssh root@192.168.1.1 "tail -20 /root/auto_auth.log"
 2. **AP-only 热点模式稳定可靠**，三终端实测正常上网，NAT 后校园网只见一个身份
 3. **板载 WiFi 的 sta+AP 并发不可用**（BCM43455 固件缺陷），需要并发就上 USB WiFi 棒
 4. **TTL 伪装**可封堵最常用的防私接检测
-5. 整套方案零额外硬件、零人工干预、重启自恢复，适合同类高校锐捷/Portal + CIMS 环境参考
+5. **OLED 状态屏 + nft 命名计数器按设备记账**：不依赖 nlbwmon（与 offload 不兼容），流量走软转发，状态持久化可跨重启
+6. 整套方案零额外硬件（OLED 屏为可选扩展）、零人工干预、重启自恢复，适合同类高校锐捷/Portal + CIMS 环境参考

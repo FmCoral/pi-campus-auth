@@ -25,6 +25,7 @@
 - 🔁 **掉线自愈**：cron 每分钟探测，断网立即重认证
 - 📶 **热点 AP**：5GHz VHT80，多终端接入，NAT 后校园网只见一个身份
 - 🛡️ **防检测**：TTL 强制 64，封堵最常用的 TTL 跳数识别
+- 📺 **OLED 状态屏（可选）**：SSD1306 屏三页轮换显示连接数、实时速率、累计流量、系统状态；nftables 按设备流量记账，重启不丢 + 按天落日志
 - 🔐 **凭据分离**：账号密码走独立配置文件 / 环境变量，仓库内零敏感信息
 
 ## 网络拓扑
@@ -77,6 +78,7 @@ vi /root/auto_auth.conf          # 填入学号、密码
 │   ├── crontab-root             # cron 配置
 │   ├── hotplug-routes.sh        # 路由持久化（hotplug）
 │   ├── firewall.ttl.sh          # TTL 伪装（nftables）
+│   ├── oled_status.py           # OLED 状态屏 + nftables 按设备流量记账守护进程
 │   └── verify_ttl.py            # TTL 伪装验证脚本
 ├── tools/                       # 逆向调试脚本（不部署）
 │   ├── probe.py / probe2.py / probe3.py
@@ -114,6 +116,8 @@ eportal redirect → sso authorize → cas/login
   NAT 保证单 IP/MAC/账号，TTL 伪装消除转发跳数特征，常规检测无法识别。仍建议终端数量适度、避免异常 P2P 流量。
 - **认证失效怎么办？**
   cron 会自动重认证；日志在 `/root/auto_auth.log`，查 `re-auth SUCCESS` 即可确认。
+- **怎么看每个设备用了多少流量？**
+  OLED 屏轮播各设备累计流量；完整数据在 `/root/traffic_state.json`，按天日志在 `/root/traffic_log/`。基于 nftables 计数器实现，需关闭 flow_offloading（见部署文档 2.17）。
 
 ## 免责声明
 
