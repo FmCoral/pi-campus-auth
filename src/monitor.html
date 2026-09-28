@@ -10,12 +10,14 @@
   --up:#0ea5e9; --down:#22c55e; --bar:#22c55e; --bar2:#0ea5e9;
   --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --chip:#f9fafb; --code:#0d1117;
   --side:#0e1116; --sidetext:#9ca3af; --sideactive:#f3f4f6; --brand:#16a34a;
+  --purple:#a855f7; --grid:rgba(0,0,0,.06);
   --shadow:0 1px 2px rgba(0,0,0,.05);
 }
 :root[data-theme=dark]{
   --bg:#0f1115; --card:#171a21; --muted:#8b93a1; --text:#e5e7eb; --border:#262b35;
   --up:#38bdf8; --down:#4ade80; --chip:#1c2029; --code:#0b0d11;
   --side:#0b0d11; --sidetext:#8b93a1; --sideactive:#e5e7eb; --brand:#4ade80;
+  --purple:#c084fc; --grid:rgba(255,255,255,.07);
   --shadow:0 1px 3px rgba(0,0,0,.35);
 }
 @media (prefers-color-scheme: dark){
@@ -23,6 +25,7 @@
     --bg:#0f1115; --card:#171a21; --muted:#8b93a1; --text:#e5e7eb; --border:#262b35;
     --up:#38bdf8; --down:#4ade80; --chip:#1c2029; --code:#0b0d11;
     --side:#0b0d11; --sidetext:#8b93a1; --sideactive:#e5e7eb; --brand:#4ade80;
+    --purple:#c084fc; --grid:rgba(255,255,255,.07);
     --shadow:0 1px 3px rgba(0,0,0,.35);
   }
 }
@@ -47,7 +50,7 @@ body{margin:0;background:var(--bg);color:var(--text);
   border-left-color:var(--brand)}
 .side .foot{margin-top:auto;color:var(--sidetext);font-size:11px;padding:12px 8px}
 .main{margin-left:168px;min-height:100vh;display:flex;flex-direction:column}
-.inner{width:100%;max-width:1160px;margin:0 auto;padding:0 20px 24px}
+.inner{width:100%;max-width:1160px;margin:0 auto;padding:16px 20px 24px}
 
 /* ---- 顶栏 ---- */
 .topbar{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--border)}
@@ -67,7 +70,9 @@ button:hover{border-color:var(--muted)}
 .seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
 .seg button{border:none;border-radius:0;padding:4px 14px;font-size:12px}
 .seg button+button{border-left:1px solid var(--border)}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
 .seg button.on{background:var(--brand);color:#fff}
+.h2r.seg{display:inline-flex;gap:0}   /* .h2r 的 gap 会在分段按钮间撑出白缝，组合使用时重置 */
 input,select{background:var(--card);color:var(--text);border:1px solid var(--border);
   border-radius:9px;padding:6px 12px;font-size:13px;outline:none}
 input:focus{border-color:var(--brand)}
@@ -98,9 +103,31 @@ input:focus{border-color:var(--brand)}
 @media (max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}
   .kpi .v{font-size:18px;white-space:normal}}
 
-.ov-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;margin-bottom:16px}
+.ov-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;margin-bottom:16px;align-items:start}
 @media (max-width:900px){.ov-grid{grid-template-columns:1fr}}
+.chartbox{position:relative}
 .chartbox svg{width:100%;height:auto;display:block}
+
+/* ---- 流量统计页增强 ---- */
+.kpis4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:1080px){.kpis4{grid-template-columns:repeat(2,1fr)}}
+.tr-grid{grid-template-columns:minmax(0,1fr) 320px;gap:16px;margin-bottom:16px}
+@media (max-width:960px){.tr-grid{grid-template-columns:1fr}}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.sw.today{background:var(--brand)}
+.sw.yday{background:var(--muted);opacity:.55}
+.struct{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.struct .sc{background:var(--chip);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
+.struct .sc .k{font-size:12px;color:var(--muted);margin-bottom:5px}
+.struct .sc .v{font-size:20px;font-weight:700;line-height:1.25}
+.struct .sc .v small{font-size:12px;font-weight:400;color:var(--muted);margin-left:3px}
+.ratio{height:8px;border-radius:4px;display:flex;overflow:hidden;margin-top:9px}
+.ratio i{display:block;height:100%}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:7px 10px;font-size:12px;box-shadow:0 4px 18px rgba(0,0,0,.18);
+  white-space:nowrap;z-index:6;display:none;line-height:1.6}
+.tipline{position:absolute;width:1px;pointer-events:none;background:var(--muted);
+  opacity:.55;z-index:4;display:none}
 
 /* ---- 表格 ---- */
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -114,11 +141,43 @@ th.sort-desc::after{content:' ▼';font-size:10px}
 td{padding:8px 10px;border-top:1px solid var(--border);white-space:nowrap}
 tbody tr:hover td{background:var(--chip)}
 .dev{display:flex;align-items:center;gap:9px}
+.dev .meta{display:flex;flex-direction:column;gap:1px;min-width:0}
+.dev .meta small{font-size:11px;color:var(--muted);font-weight:400}
+.stcell{display:flex;flex-direction:column;gap:2px}
+.stcell .stsub{font-size:11px;color:var(--muted);font-weight:400;white-space:nowrap}
 .avatar{width:28px;height:28px;border-radius:50%;color:#fff;font-size:13px;font-weight:600;
   display:inline-flex;align-items:center;justify-content:center;flex:none}
 .tscroll{overflow-x:auto}
 .share{height:6px;border-radius:3px;background:var(--border);min-width:56px;overflow:hidden}
 .share i{display:block;height:100%;border-radius:3px;background:var(--bar)}
+
+/* ---- 设备流量去向展开面板 ---- */
+tr.devrow{cursor:pointer}
+tr.devrow:hover td{background:var(--chip)}
+tr.devrow.open td{background:var(--chip)}
+.chev{width:8px;height:8px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);
+  transform:rotate(45deg);transition:transform .15s;margin:2px 2px 0 6px;flex:none}
+tr.devrow.open .chev{transform:rotate(-135deg);margin-top:6px}
+tr.destrow td{background:var(--chip);border-bottom:1px solid var(--border);padding:0}
+.destp{padding:14px 16px 16px;display:grid;grid-template-columns:190px 1fr;gap:22px;
+  min-width:660px}
+.desthead{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+.desthead .cap{color:var(--muted)}
+.seg.sm button{padding:3px 12px;font-size:11px}
+.donutwrap{display:flex;align-items:center;justify-content:center}
+.donutwrap svg{width:176px;height:auto;overflow:visible}
+.donut-total{font-size:16px;font-weight:700;fill:var(--text)}
+.donut-cap{font-size:10px;fill:var(--muted)}
+.dlist{display:flex;flex-direction:column;gap:7px;min-width:0}
+.drow{display:grid;grid-template-columns:14px minmax(70px,1fr) auto;gap:8px;align-items:center;
+  font-size:12px}
+.drow i{width:9px;height:9px;border-radius:2.5px;flex:none}
+.drow .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drow .vl{color:var(--muted);white-space:nowrap}
+.dbar{grid-column:2/4;height:5px;border-radius:3px;background:var(--border);overflow:hidden;
+  margin-top:-3px}
+.dbar b{display:block;height:100%;border-radius:3px}
+.dest-empty{grid-column:1/-1;color:var(--muted);font-size:12px;padding:8px 0}
 
 /* ---- 环形图 ---- */
 .ringwrap{display:flex;flex-direction:column;align-items:center;padding:6px 0}
@@ -131,6 +190,26 @@ svg text{fill:var(--muted);font-size:11px}
 .lrow:first-of-type{border-top:none}
 .lrow .grow{flex:1;min-width:0}
 
+/* ---- 系统详情页 ---- */
+.sys2{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}
+@media (max-width:900px){.sys2{grid-template-columns:1fr}}
+.sysflex{display:flex;align-items:center;gap:18px}
+.sysflex .grow{flex:1;min-width:0}
+.kvgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 28px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.kv .cap{flex:none}
+.kv b{font-weight:600;text-align:right;word-break:break-all}
+.hbar-row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:12px}
+.hbar-row .nm{width:40px;flex:none;color:var(--muted)}
+.hbar{flex:1;height:8px;border-radius:4px;background:var(--border);overflow:hidden}
+.hbar i{display:block;height:100%;border-radius:4px;background:var(--bar)}
+.hbar-row .val{width:46px;text-align:right;flex:none}
+.stk{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:8px 0 6px}
+.stk i{display:block;height:100%}
+.lg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--muted)}
+.lg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+.h2right{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400}
+
 pre{background:var(--code);color:#c9d1d9;border-radius:10px;padding:14px;font-size:12px;
   line-height:1.7;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all;
   max-height:440px;overflow-y:auto}
@@ -142,28 +221,30 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
   .side{position:static;width:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:0 8px}
   .side .logo{padding:10px 8px}
   .side .logo span{display:none}
-  .side a{border-left:none;padding:10px 12px}
+  .side a{border-left:none;padding:12px 16px;gap:0}
+  .side a span{display:none}
+  .side a svg{width:20px;height:20px}
   .side a.active{border-left:none;border-bottom:2px solid var(--brand)}
   .side .foot{display:none}
   .main{margin-left:0}
-  .inner{padding:0 12px 16px}
+  .inner{padding:14px 12px 16px}
 }
 </style>
 </head>
 <body>
 <nav class="side">
   <div class="logo"><i></i><div><b>HWIFI</b><span>监控面板</span></div></div>
-  <a href="#/" data-page="overview" class="active">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4a8 8 0 1 0 8 8"/><path d="M12 12l4-4"/></svg>总览</a>
-  <a href="#/traffic" data-page="traffic">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M4 16l4-6 4 3 5-8"/></svg>流量统计</a>
-  <a href="#/devices" data-page="devices">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>终端设备</a>
-  <a href="#/system" data-page="system">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>系统状态</a>
-  <a href="#/auth" data-page="auth">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>认证日志</a>
-  <div class="foot">pi-campus-auth</div>
+  <a href="#/" data-page="overview" class="active" aria-label="总览">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4a8 8 0 1 0 8 8"/><path d="M12 12l4-4"/></svg><span>总览</span></a>
+  <a href="#/traffic" data-page="traffic" aria-label="流量统计">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M4 16l4-6 4 3 5-8"/></svg><span>流量统计</span></a>
+  <a href="#/devices" data-page="devices" aria-label="终端设备">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><span>终端设备</span></a>
+  <a href="#/system" data-page="system" aria-label="系统状态">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg><span>系统状态</span></a>
+  <a href="#/auth" data-page="auth" aria-label="认证日志">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span>认证日志</span></a>
+
 </nav>
 <div class="main">
 <div class="topbar"><div class="inner">
@@ -206,34 +287,55 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
 
 <!-- ============ 流量统计 ============ -->
 <div class="page" id="page-traffic">
+  <div class="kpis kpis4" id="trKpiRow"></div>
   <div class="card">
     <h2>分钟级流量
       <span class="h2r seg"><button id="h24" class="on">24 小时</button><button id="h72">3 天</button></span>
     </h2>
     <div class="chartbox"><svg id="histChart" viewBox="0 0 1000 280"></svg></div>
-    <div class="cap"><span style="color:var(--down)">■</span> 下行　<span style="color:var(--up)">■</span> 上行 · 对数坐标 · 每分钟一点 · 断电自动保存 · 保留 3 天</div>
+    <div class="cap"><span style="color:var(--down)">■</span> 下行　<span style="color:var(--up)">■</span> 上行 · 对数坐标 · 每分钟一点 · 虚线为均值 · 悬停/触摸查看明细 · <span id="histCov"></span> · 保留 3 天</div>
   </div>
-  <div class="card">
-    <h2>实时趋势 <span class="cap h2r" style="font-weight:400">最近 5 分钟</span></h2>
-    <div class="chartbox"><svg id="trendChart2" viewBox="0 0 1000 230"></svg></div>
-  </div>
-  <div class="grid" style="grid-template-columns:minmax(0,1fr) 330px">
+  <div class="grid tr-grid">
     <div class="card" style="margin-bottom:0">
-      <h2>按天流量 <span class="cap" style="font-weight:400">快照差值估算</span>
-        <span class="h2r seg"><button id="d7" class="on">7 天</button><button id="d30">30 天</button></span>
+      <h2>今日 vs 昨日
+        <span class="h2r cap" id="busyTop" style="font-weight:400"></span>
       </h2>
-      <div class="chartbox"><svg id="dailyChart" viewBox="0 0 1000 250"></svg></div>
-      <div class="cap">来源 /root/traffic_log，粒度 0.1G</div>
+      <div class="chartbox"><svg id="hourChart" viewBox="0 0 1000 260"></svg></div>
+      <div class="cap"><i class="sw today"></i>今日　<i class="sw yday"></i>昨日 · 按小时聚合（15 分钟快照差值）</div>
     </div>
     <div class="card" style="margin-bottom:0">
-      <h2>设备累计占比</h2>
-      <div id="devShare"></div>
+      <h2>流量结构</h2>
+      <div id="structBox"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>按天流量
+      <span class="cap" id="dayAvgCap" style="font-weight:400"></span>
+      <span class="h2r seg"><button id="d7" class="on">7 天</button><button id="d30">30 天</button></span>
+    </h2>
+    <div class="chartbox"><svg id="dailyChart" viewBox="0 0 1000 260"></svg></div>
+    <div class="cap">柱为当日总量 · 绿线为 7 日均线 · 来源 /root/traffic_log 快照差值</div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <h2>设备流量明细 <span class="h2r cap" style="font-weight:400">点表头排序</span></h2>
+    <div class="tscroll">
+    <table>
+      <thead><tr>
+        <th class="sortable" data-s="name">设备</th>
+        <th class="r sortable" data-s="today">今日</th>
+        <th class="r sortable" data-s="d7">近 7 天</th>
+        <th class="r sortable" data-s="d30">近 30 天</th>
+        <th style="width:210px">今日占比</th>
+      </tr></thead>
+      <tbody id="trDevRows"></tbody>
+    </table>
     </div>
   </div>
 </div>
 
 <!-- ============ 终端设备 ============ -->
 <div class="page" id="page-devices">
+  <div class="kpis kpis4" id="devKpiRow"></div>
   <div class="card">
     <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <input id="devSearch" placeholder="搜索名称 / IP / MAC" style="min-width:220px;flex:1">
@@ -246,7 +348,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
     <table>
       <thead><tr>
         <th class="sortable" data-s="name">设备</th><th class="sortable" data-s="ip">IP</th>
-        <th>MAC</th><th class="sortable" data-s="online">状态</th>
+        <th class="sortable" data-s="online">状态</th>
+        <th class="r sortable" data-s="total_online">累计在线</th>
         <th class="r sortable" data-s="down_bps">实时 ↓</th><th class="r sortable" data-s="up_bps">实时 ↑</th>
         <th class="r sortable" data-s="rx">累计 ↓</th><th class="r sortable" data-s="tx">累计 ↑</th>
         <th class="r sortable" data-s="total">合计</th>
@@ -259,22 +362,64 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
 
 <!-- ============ 系统状态 ============ -->
 <div class="page" id="page-system">
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-bottom:16px">
-    <div class="card" style="margin-bottom:0;text-align:center">
-      <h2 style="justify-content:center">CPU</h2>
-      <div class="ringwrap" id="ringCpu"></div>
-      <div class="cap" id="loadTxt" style="margin-top:8px"></div>
+  <div class="kpis" id="sysKpis"></div>
+
+  <div class="card">
+    <h2>设备信息</h2>
+    <div class="kvgrid" id="devInfo"></div>
+  </div>
+
+  <div class="grid sys2">
+    <div class="card">
+      <h2>CPU 详情</h2>
+      <div class="sysflex">
+        <div class="ringwrap" id="ringCpu"></div>
+        <div class="grow" id="coreBars"></div>
+      </div>
+      <div id="cpuBreak"></div>
     </div>
-    <div class="card" style="margin-bottom:0;text-align:center">
-      <h2 style="justify-content:center">内存</h2>
-      <div class="ringwrap" id="ringMem"></div>
-      <div class="cap" id="memTxt" style="margin-top:8px"></div>
-    </div>
-    <div class="card" style="margin-bottom:0">
-      <h2>温度 / 运行</h2>
-      <div id="tempCard"></div>
+    <div class="card">
+      <h2>内存详情</h2>
+      <div class="sysflex">
+        <div class="ringwrap" id="ringMem"></div>
+        <div class="grow" id="memRows"></div>
+      </div>
     </div>
   </div>
+
+  <div class="grid sys2">
+    <div class="card">
+      <h2>温度趋势 · 最近 1 小时<span class="h2right" id="tempNow"></span></h2>
+      <div class="chartbox" id="tempChart"></div>
+    </div>
+    <div class="card">
+      <h2>存储占用</h2>
+      <div id="storeBars"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>网络接口</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>接口</th><th>状态</th><th>IPv4</th><th>MAC</th>
+        <th class="r">累计接收</th><th class="r">累计发送</th></tr></thead>
+      <tbody id="ifaceRows"></tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h2>进程监控
+      <span class="seg" style="margin-left:auto">
+        <button id="psCpu" class="on">按 CPU</button>
+        <button id="psMem">按内存</button>
+      </span>
+    </h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>PID</th><th>进程名</th><th class="r">CPU %</th><th class="r">内存占用</th></tr></thead>
+      <tbody id="procRows"></tbody>
+    </table></div>
+  </div>
+
   <div class="card">
     <h2>服务健康</h2>
     <div id="svcList"></div>
@@ -299,7 +444,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
   </div>
 </div>
 
-<footer>pi-campus-auth · 状态 2 秒自动刷新</footer>
+<footer></footer>
 </div>
 </div>
 
@@ -313,6 +458,40 @@ function mkDemo(){
     hist.push({t:now-j*60,down:(0.2+s2*1.6)*1048576,up:(0.05+s2*0.3)*1048576});}
   var day=function(n){var d=new Date();d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);};
   var daily=[];for(var k=11;k>=0;k--)daily.push({date:day(k),total:(2+Math.abs(Math.sin(k*1.7))*9)*1073741824});
+  var tempHist=[];for(var h=719;h>=0;h--){var ts=Math.sin(h/40)*1.5+Math.sin(h/7)*0.5;
+    tempHist.push({t:now-h*5,temp:42+ts+Math.max(0,Math.sin(h/160)*6)});}
+  var system={
+    uptime_s:86400*3+7231, cpu_pct:11, temp:47.3, mem_pct:38, load:["0.12","0.20","0.18"],
+    device:{model:"Raspberry Pi 4 Model B Rev 1.4",
+      distro:"ImmortalWrt 25.12.2 r38135-0c4cd0f9920a", kernel:"6.12.103",
+      arch:"aarch64_cortex-a72", target:"bcm27xx/bcm2711",
+      revision:"r38135-0c4cd0f9920a", hostname:"ImmortalWrt", boot:now-(86400*3+7231)},
+    cpu_detail:{agg:{user:8.1,nice:0,sys:2.4,iowait:0.2,irq:0.3,busy:11},
+      cores:[14,9,12,7]},
+    mem:{total:4*1073741824,used_real:1.52*1073741824,avail:2.48*1073741824,
+      cached:0.6*1073741824,buffers:0.08*1073741824,free:2.1*1073741824},
+    storage:[{fs:"/dev/root",mount:"/",total:297376*1024,used:56976*1024,avail:234256*1024,pct:20},
+      {fs:"/dev/mmcblk0p1",mount:"/boot",total:65390*1024,used:27408*1024,avail:37982*1024,pct:42},
+      {fs:"tmpfs",mount:"/tmp",total:1945332*1024,used:2100*1024,avail:1943232*1024,pct:0}],
+    ifaces:[
+      {name:"eth0",op:true,ip:"10.101.0.16",mac:"dc:a6:32:11:22:33",rx:26.8*1073741824,tx:1.3*1073741824},
+      {name:"phy0-ap0",op:true,ip:"",mac:"dc:a6:32:44:55:66",rx:12.4*1073741824,tx:11.2*1073741824},
+      {name:"br-lan",op:true,ip:"192.168.1.1",mac:"dc:a6:32:77:88:99",rx:13.1*1073741824,tx:12.9*1073741824}],
+    procs:[
+      {pid:1234,name:"python3 /root/oled_status.py",cpu:4.2,rss:18*1048576},
+      {pid:5678,name:"python3 /root/monitor_web.py",cpu:1.1,rss:14*1048576},
+      {pid:901,name:"hostapd -s phy0-ap0",cpu:0.6,rss:5*1048576},
+      {pid:345,name:"dnsmasq -C /var/etc/dnsmasq.conf.cfg01411c",cpu:0.2,rss:4*1048576},
+      {pid:890,name:"crond -f -l 8",cpu:0.1,rss:1.2*1048576}],
+    temp_hist:tempHist,
+    services:[
+      {name:"OLED 状态屏",running:true,uptime:86400*2},
+      {name:"Web 监控",running:true,uptime:86400},
+      {name:"定时任务 crond",running:true,uptime:86400*3+7200},
+      {name:"DHCP/DNS dnsmasq",running:true,uptime:86400*3+7000},
+      {name:"Wi-Fi hostapd",running:true,uptime:86400*3+5000},
+      {name:"网络管理 netifd",running:true,uptime:86400*3+7231}]};
+
   return {
     time:new Date().toTimeString().slice(0,8), uptime_s:86400*3+7231, online:true,
     wan_ip:"10.101.0.16", gateway:"10.101.0.1", clients:3,
@@ -322,12 +501,15 @@ function mkDemo(){
     services:[{name:"OLED 状态屏",running:true},{name:"Web 监控",running:true},{name:"定时任务 crond",running:true}],
     devices:[
       {name:"coral", mac:"18:93:41:ee:67:b3", ip:"192.168.1.140", rx:12.6*1073741824,
-       tx:0.7*1073741824, up_bps:62000, down_bps:810000, online:true},
+       tx:0.7*1073741824, up_bps:62000, down_bps:810000, online:true,
+       conn_s:28142, total_online:86400*12+4200, last_seen:now},
       {name:"vivo-X200s", mac:"aa:bb:cc:01:02:03", ip:"192.168.1.106", rx:0.6*1073741824,
-       tx:0.05*1073741824, up_bps:31000, down_bps:240000, online:true},
+       tx:0.05*1073741824, up_bps:31000, down_bps:240000, online:true,
+       conn_s:6245, total_online:86400*2+7200, last_seen:now},
       {name:"iPhone", mac:"aa:bb:cc:04:05:06", ip:"192.168.1.150", rx:0.2*1073741824,
-       tx:0.01*1073741824, up_bps:0, down_bps:0, online:false}
-    ], trend:trend, hist:hist, daily:daily,
+       tx:0.01*1073741824, up_bps:0, down_bps:0, online:false,
+       conn_s:0, total_online:5*3600+1200, last_seen:now-3*3600}
+    ], trend:trend, hist:hist, daily:daily, system:system,
     auth:{count:4, last:"2026-09-26 08:12:44", fail:2,
       recent:["[2026-09-27 12:34:03] offline detected, starting re-auth...",
               "[2026-09-27 12:34:09] re-auth FAIL: step1: no eportal redirect (already online?)",
@@ -381,11 +563,11 @@ function pill(ok,on,off){return '<span class="pill '+(ok?'ok':'off')+'"><span cl
 // ---------- 通用折线图（带面积填充；useLog=true 时 Y 轴对数坐标，
 //            解决"平时几 KB/s、突发几百 KB/s"动态范围大导致曲线贴地的问题） ----------
 var BPS_FLOOR = 1000;   // 对数坐标下限 1 KB/s（试过 100B/s：心跳噪声被放大成满屏毛刺，放弃）
-function lineChart(el, series, xlabels, useLog){
+function lineChart(el, series, xlabels, useLog, extras){
   var vb=el.getAttribute('viewBox').split(' ');
   // viewBox 格式为 "minX minY 宽 高"，宽高在第 2/3 个分量（此前误取 minX/minY 导致 W=H=0，
   // 折线全部画到可视区外——三张折线图集体"不显示"的根因）
-  var W=+vb[2],H=+vb[3],L=64,R=14,T=14,B=26,pw=W-L-R,ph=H-T-B;
+  var W=+vb[2],H=+vb[3],L=72,R=14,T=14,B=26,pw=W-L-R,ph=H-T-B;
   var vmax=0;series.forEach(function(s){s.pts.forEach(function(p){vmax=Math.max(vmax,p.y);});});
   var n=Math.max.apply(null,series.map(function(s){return s.pts.length;}));
   if(n<2){el.innerHTML='';return;}
@@ -409,7 +591,7 @@ function lineChart(el, series, xlabels, useLog){
     var gy=Y(g);
     s+='<line x1="'+L+'" y1="'+gy.toFixed(1)+'" x2="'+(W-R)+'" y2="'+gy.toFixed(1)+
        '" style="stroke:var(--border)"/>';
-    s+='<text x="'+(L-8)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end">'+fmtBps(g)+'</text>';
+    s+='<text x="'+(L-8)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end" style="font-size:13px;font-weight:600">'+fmtBps(g)+'</text>';
   });
   series.forEach(function(sr){
     var ptsArr=sr.pts.map(function(p){return X(p.x).toFixed(1)+','+Y(p.y).toFixed(1);});
@@ -422,17 +604,43 @@ function lineChart(el, series, xlabels, useLog){
        ';stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>';
   });
   (xlabels||[]).forEach(function(xl){
-    s+='<text x="'+X(xl.i)+'" y="'+(H-6)+'" text-anchor="middle">'+xl.txt+'</text>';
+    var anchor=xl.anchor||'middle';
+    var lx=X(xl.i)+(anchor==='start'?3:anchor==='end'?-3:0);
+    s+='<text x="'+lx.toFixed(1)+'" y="'+(H-6)+'" text-anchor="'+anchor+'" style="font-size:13px">'+xl.txt+'</text>';
   });
+  if(extras){
+    if(extras.avg){
+      var ay=Y(extras.avg);
+      s+='<line x1="'+L+'" y1="'+ay.toFixed(1)+'" x2="'+(W-R)+'" y2="'+ay.toFixed(1)+
+        '" style="stroke:var(--muted);stroke-width:1.5;stroke-dasharray:6 5"/>';
+      s+='<text x="'+(L+4)+'" y="'+(ay-6).toFixed(1)+'" style="font-size:11px">均值 '+
+        fmtBps(extras.avg)+'</text>';
+    }
+    (extras.markers||[]).forEach(function(m){
+      var cx=X(m.i),cy=Y(m.v),ly=cy-9;
+      if(ly<T+14)ly=cy+16;
+      s+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="4" style="fill:var(--down);'+
+        'stroke:var(--card);stroke-width:2"/>';
+      s+='<text x="'+cx.toFixed(1)+'" y="'+ly.toFixed(1)+'" text-anchor="middle" style="'+
+        'font-size:11px;font-weight:600;fill:var(--text)">'+m.label+'</text>';
+    });
+  }
   el.innerHTML=s;
 }
 
 function drawTrend(trend,elId){
   var el=document.getElementById(elId);
   if(!trend||trend.length<2){el.innerHTML='';return;}
+  // 指数平滑（α=0.35），1s 刷新时折线不抖
+  var smD=trend[0].down, smU=trend[0].up;
+  var ptsD=[],ptsU=[];
+  trend.forEach(function(p,i){
+    smD=smD*0.65+p.down*0.35; smU=smU*0.65+p.up*0.35;
+    ptsD.push({x:i,y:smD}); ptsU.push({x:i,y:smU});
+  });
   lineChart(el,[
-    {pts:trend.map(function(p,i){return {x:i,y:p.down};}),color:'var(--down)'},
-    {pts:trend.map(function(p,i){return {x:i,y:p.up};}),color:'var(--up)'}
+    {pts:ptsD,color:'var(--down)'},
+    {pts:ptsU,color:'var(--up)'}
   ],[{i:0,txt:hhmm(trend[0].t)},{i:Math.floor((trend.length-1)/2),txt:hhmm(trend[Math.floor((trend.length-1)/2)].t)},
      {i:trend.length-1,txt:hhmm(trend[trend.length-1].t)}],true);
 }
@@ -458,25 +666,84 @@ function drawHist(hist){
   }
   var cnt=Math.max(ptsD.length,1);
   var span=hist[n-1].t-hist[0].t, stepH=Math.max(Math.round(span/3600/6),1);
-  var labels=[],seen={};
+  var labels=[],seen={},prevDay='';
+  var MINLI=9;   // 相邻标签至少间隔 9 个桶（约 41 viewBox 单位），防止日期与整点标签叠印
   for(i=0;i<cnt;i++){
     var idx=Math.min(Math.floor(i*step),n-1);
-    var h=new Date(hist[idx].t*1000).getHours();
-    if(h%stepH===0&&!seen[h]){seen[h]=1;labels.push({i:i,txt:('0'+h).slice(-2)+':00'});}
+    var dt=new Date(hist[idx].t*1000),h=dt.getHours();
+    var dayKey=('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2);
+    var dayStart=dayKey!==prevDay;
+    if(dayStart)prevDay=dayKey;
+    // 跨天首点显示日期标记（左对齐，避开 Y 轴标签），并占用该小时，00:00 不再重复标注
+    if(dayStart&&!seen[dayKey+'d']){
+      seen[dayKey+'d']=1;seen[dayKey+h]=1;
+      labels.push({i:i,txt:dayKey,anchor:'start'});}
+    else if((!labels.length||i-labels[labels.length-1].i>=MINLI)&&
+            h%stepH===0&&!seen[dayKey+h]){
+      seen[dayKey+h]=1;labels.push({i:i,txt:('0'+h).slice(-2)+':00'});}
+  }
+  var sum=0;ptsD.forEach(function(p){sum+=p.y;});
+  var avg=sum/ptsD.length;
+  // 峰值标注：按速率排序，且彼此索引距离 ≥10（避免三个点挤成一团）
+  var ranked=ptsD.slice().sort(function(a,b){return b.y-a.y;}), markers=[];
+  for(var k=0;k<ranked.length&&markers.length<3;k++){
+    var cand=ranked[k];
+    if(!markers.some(function(m){return Math.abs(m.i-cand.x)<10;}))
+      markers.push({i:cand.x,v:cand.y,label:fmtBps(cand.y)});
   }
   lineChart(el,[
     {pts:ptsD,color:'var(--down)'},{pts:ptsU,color:'var(--up)'}
-  ],labels,true);
+  ],labels,true,{avg:avg,markers:markers});
+  attachHistTip(el,hist,n,step,cnt);
 }
 
-// ---------- 按天柱状图 ----------
+// ---------- 分钟图悬停/触摸 tooltip ----------
+function attachHistTip(el,hist,n,step,cnt){
+  var box=el.parentNode;
+  var tip=box.querySelector('.tip');
+  if(!tip){tip=document.createElement('div');tip.className='tip';box.appendChild(tip);}
+  var line=box.querySelector('.tipline');
+  if(!line){line=document.createElement('div');line.className='tipline';box.appendChild(line);}
+  var L=72,R=14,T=14,B=26,VBW=1000,VBH=280;
+  function hide(){tip.style.display='none';line.style.display='none';}
+  function showAt(clientX){
+    var r=el.getBoundingClientRect();
+    var vx=(clientX-r.left)/r.width*VBW;
+    if(vx<L||vx>VBW-R){hide();return;}
+    var i=Math.round((vx-L)/(VBW-L-R)*(cnt-1));
+    i=Math.max(0,Math.min(cnt-1,i));
+    var idx=Math.min(Math.floor(i*step),n-1), p=hist[idx];
+    tip.innerHTML='<b>'+hhmm(p.t)+'</b><br>'+
+      '<span style="color:var(--down)">↓ '+fmtBps(p.down)+'</span><br>'+
+      '<span style="color:var(--up)">↑ '+fmtBps(p.up)+'</span>';
+    tip.style.display='block';
+    var boxR=box.getBoundingClientRect();
+    var screenX=r.left+(L+(VBW-L-R)*i/(cnt-1))/VBW*r.width;
+    var xpx=screenX-boxR.left;
+    line.style.display='block';
+    line.style.left=xpx+'px';
+    line.style.top=(T/VBH*r.height)+'px';
+    line.style.height=((VBH-T-B)/VBH*r.height)+'px';
+    tip.style.left='auto';tip.style.right='auto';tip.style.top='8px';
+    if(xpx+12+tip.offsetWidth>boxR.width)tip.style.right=(boxR.width-xpx+10)+'px';
+    else tip.style.left=(xpx+10)+'px';
+  }
+  el.onmousemove=function(e){showAt(e.clientX);};
+  el.onmouseleave=hide;
+  el.ontouchstart=function(e){if(e.touches[0])showAt(e.touches[0].clientX);};
+  el.ontouchmove=function(e){if(e.touches[0])showAt(e.touches[0].clientX);};
+}
+
+// ---------- 按天柱状图（叠加 7 日均线，最大值柱顶标注） ----------
 function drawDaily(daily){
   var el=document.getElementById('dailyChart');
-  var W=1000,H=250,L=64,R=14,T=18,B=28,pw=W-L-R,ph=H-T-B;
-  if(!daily||!daily.length){el.innerHTML=
+  daily=(daily||[]).slice();
+  if(daily.length>dailyDays)daily=daily.slice(-dailyDays);
+  var W=1000,H=260,L=64,R=14,T=18,B=28,pw=W-L-R,ph=H-T-B;
+  if(!daily.length){el.innerHTML=
     '<text x="500" y="120" text-anchor="middle">日志积累中，明天起可看趋势</text>';return;}
-  var mx=niceMax(Math.max.apply(null,daily.map(function(d){return d.total;}))*1.05);
   var n=daily.length,bw=Math.min(pw/n*0.6,52),step=pw/n;
+  var mx=niceMax(Math.max.apply(null,daily.map(function(d){return d.total;}))*1.12);
   var Y=function(v){return T+ph*(1-v/mx);};
   var s='';
   [1,0.5,0].forEach(function(f){
@@ -485,18 +752,27 @@ function drawDaily(daily){
        '" style="stroke:var(--border)"/>';
     s+='<text x="'+(L-8)+'" y="'+(gy+4)+'" text-anchor="end">'+fmtGB(mx*f)+'</text>';
   });
-  var skip=Math.ceil(n/10);
+  var maxI=0;daily.forEach(function(d,i){if(d.total>daily[maxI].total)maxI=i;});
+  var skip=Math.ceil(n/12);
   daily.forEach(function(d,i){
-    var bx=L+step*i+(step-bw)/2, by=Y(d.total), bh=T+ph-by;
-    s+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
+    var cx=L+step*i+step/2, by=Y(d.total), bh=T+ph-by;
+    s+='<rect x="'+(cx-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
        '" height="'+Math.max(bh,1).toFixed(1)+'" rx="4" style="fill:var(--bar2);opacity:0.8"/>';
-    if(n<=14||i%skip==0)
-      s+='<text x="'+(bx+bw/2).toFixed(1)+'" y="'+(by-5).toFixed(1)+
-         '" text-anchor="middle" style="fill:var(--text);font-weight:600">'+fmtGB(d.total)+'</text>';
-    if(i%skip==0)
-      s+='<text x="'+(bx+bw/2).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+
-         d.date.slice(5)+'</text>';
+    if(i===maxI||n<=14)
+      s+='<text x="'+cx.toFixed(1)+'" y="'+(by-5).toFixed(1)+'" text-anchor="middle"'+
+         ' style="fill:var(--text);font-weight:600">'+fmtGB(d.total)+'</text>';
+    if(i%skip===0)
+      s+='<text x="'+cx.toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+d.date.slice(5)+'</text>';
   });
+  // 7 日均线（前 6 天不足窗口，不画）
+  var ma=[];
+  for(var i=6;i<n;i++){
+    var sm=0;for(var j=i-6;j<=i;j++)sm+=daily[j].total;
+    ma.push((L+step*i+step/2).toFixed(1)+','+Y(sm/7).toFixed(1));
+  }
+  if(ma.length>1)
+    s+='<polyline points="'+ma.join(' ')+'" style="fill:none;stroke:var(--brand);'+
+       'stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round"/>';
   el.innerHTML=s;
 }
 
@@ -526,7 +802,8 @@ function route(){
   document.querySelectorAll('.side a').forEach(function(a){
     a.classList.toggle('active',a.dataset.page===p);});
   document.getElementById('ptitle').textContent=TITLES[p];
-  if(p==='traffic'){pullHist();pullDaily();}
+  if(p==='traffic'){pullHist();pullTraffic();}
+  if(p==='system'){pullSystem();}
   if(p==='auth'){pullLog();}
 }
 window.addEventListener('hashchange',route);
@@ -534,16 +811,123 @@ window.addEventListener('hashchange',route);
 // ---------- 数据拉取 ----------
 var DEMO=null;
 function demo(){return DEMO||(DEMO=mkDemo());}
-function pull(){fetch('/api/status').then(function(r){
+var trafficTick=0;
+function pull(){
+  if(curPage==='system')pullSystem();   // 停留系统页时随节拍刷新详情
+  if(curPage==='traffic'&&++trafficTick>=60){trafficTick=0;pullHist();pullTraffic();}
+  fetch('/api/status').then(function(r){
     if(!r.ok)throw 0;return r.json();})
   .then(function(d){window.__demo=false;render(d);})
   .catch(function(){window.__demo=true;render(demo());});}
 function pullHist(){fetch('/api/hist?h='+histHours).then(function(r){return r.json();})
   .then(drawHist)
   .catch(function(){if(window.__demo)drawHist(demo().hist);});}
-function pullDaily(){fetch('/api/history?days='+dailyDays).then(function(r){return r.json();})
-  .then(drawDaily)
-  .catch(function(){if(window.__demo)drawDaily(demo().daily);});}
+// ---------- 流量统计页（/api/traffic 聚合接口） ----------
+var trafficData=null, trSortKey='today', trSortAsc=false;
+function pullTraffic(){
+  fetch('/api/traffic').then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(t){trafficData=t;renderTraffic(t);})
+    .catch(function(){});
+}
+function deltaTag(p){
+  if(p==null)return '';
+  return '<small style="font-weight:600;color:'+(p>=0?'var(--down)':'var(--up)')+'">'+
+    (p>=0?'↑':'↓')+Math.abs(p)+'%</small>';
+}
+function renderTraffic(t){
+  var tp=t.today;
+  document.getElementById('trKpiRow').innerHTML=
+    kpi('今日流量', fmtGB(tp.total)+deltaTag(tp.delta_pct),
+       '↓'+fmtGB(tp.down)+' ↑'+fmtGB(tp.up), 'var(--brand)')+
+    kpi('本月累计', fmtGB(t.month.total), '第'+t.month.days+'天', 'var(--bar2)')+
+    kpi('24h 峰值', fmtBps(t.peak.rate), t.peak.t?hhmm(t.peak.t):'', 'var(--down)')+
+    kpi('24h 平均', fmtBps(t.avg24), '', 'var(--muted)');
+
+  drawHours(t);
+  document.getElementById('busyTop').textContent=t.busy.length?
+    '忙时 '+t.busy.map(function(b){return ('0'+b.h).slice(-2)+'时 '+fmtGB(b.v);}).join(' · ') : '';
+
+  var st=t.struct;
+  function sc(k,body){return '<div class="sc"><div class="k">'+k+'</div>'+body+'</div>';}
+  document.getElementById('structBox').innerHTML='<div class="struct">'+
+    sc('上下行比例（24h）',
+      '<div class="v">'+st.down_pct+'<small>% 下行</small></div>'+
+      '<div class="ratio"><i style="width:'+st.down_pct+'%;background:var(--down)"></i>'+
+      '<i style="width:'+st.up_pct+'%;background:var(--up)"></i></div>')+
+    sc('峰均比',
+      '<div class="v">'+st.peak_avg+'<small>倍</small></div>'+
+      '<div class="cap">24h 峰值 ÷ 均值</div>')+
+    sc('活跃小时',
+      '<div class="v">'+st.active_hours+'<small>/ 24</small></div>'+
+      '<div class="cap">高于今日小时均值</div>')+
+    sc('头号流量设备',
+      '<div class="v" style="font-size:16px;line-height:1.5">'+esc(st.top_dev||'—')+'</div>'+
+      '<div class="cap">占今日 '+st.top_pct+'%</div>')+
+    '</div>';
+
+  document.getElementById('dayAvgCap').textContent=
+    '近7天日均 '+fmtGB(t.day_avg7)+
+    (t.week_delta==null?'':'　'+(t.week_delta>=0?'周环比 ↑':'周环比 ↓')+Math.abs(t.week_delta)+'%');
+
+  drawDaily(t.daily);
+  renderTrDevices(t);
+
+  // 分钟图：数据不足 25 小时时"3 天"置灰（点了也看不到更多数据，避免误以为切换失效）
+  var ageH=t.hist_span.age_h;
+  document.getElementById('h72').disabled=ageH<25;
+  document.getElementById('histCov').textContent=
+    '已积累 '+(ageH>=24?(ageH/24).toFixed(1)+' 天':ageH.toFixed(1)+' 小时');
+}
+
+// ---------- 今日 vs 昨日 · 小时双柱 ----------
+function drawHours(t){
+  var el=document.getElementById('hourChart');
+  var W=1000,H=260,L=48,R=10,T=14,B=26,pw=W-L-R,ph=H-T-B;
+  var a=t.hours_today,b=t.hours_yday;
+  var mx=niceMax(Math.max(1,Math.max.apply(null,a),Math.max.apply(null,b))*1.05);
+  var Y=function(v){return T+ph*(1-v/mx);};
+  var group=pw/24,bw=Math.min(group*0.32,13),s='';
+  [1,0.5,0].forEach(function(f){
+    var gy=T+ph*(1-f);
+    s+='<line x1="'+L+'" y1="'+gy+'" x2="'+(W-R)+'" y2="'+gy+'" style="stroke:var(--border)"/>';
+    s+='<text x="'+(L-7)+'" y="'+(gy+4)+'" text-anchor="end">'+fmtGB(mx*f)+'</text>';
+  });
+  for(var h=0;h<24;h++){
+    var cx=L+group*h+group/2;
+    [{x:cx-bw-1,v:b[h],c:'var(--muted)',o:0.5},
+     {x:cx+1,v:a[h],c:'var(--brand)',o:1}].forEach(function(q){
+      var y=Y(q.v);
+      s+='<rect x="'+q.x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+
+        '" height="'+Math.max(T+ph-y,1).toFixed(1)+'" rx="2" style="fill:'+q.c+';opacity:'+q.o+'"/>';
+    });
+    if(h%3===0)
+      s+='<text x="'+cx.toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" style="font-size:12px">'+
+        ('0'+h).slice(-2)+'</text>';
+  }
+  el.innerHTML=s;
+}
+
+// ---------- 设备流量明细表（点表头排序） ----------
+function renderTrDevices(t){
+  var rows=t.devices.slice();
+  rows.sort(function(a,b){
+    if(trSortKey==='name')
+      return trSortAsc?a.name.localeCompare(b.name):b.name.localeCompare(a.name);
+    return trSortAsc?a[trSortKey]-b[trSortKey]:b[trSortKey]-a[trSortKey];});
+  document.getElementById('trDevRows').innerHTML=rows.map(function(r){
+    return '<tr><td><div class="dev">'+avatar(r.name)+'<b>'+esc(r.name)+'</b></div></td>'+
+      '<td class="r">'+fmtGB(r.today)+'</td>'+
+      '<td class="r">'+fmtGB(r.d7)+'</td>'+
+      '<td class="r">'+fmtGB(r.d30)+'</td>'+
+      '<td><div style="display:flex;align-items:center;gap:8px">'+
+      '<div class="share" style="flex:1"><i style="width:'+r.pct+'%;background:var(--brand)"></i></div>'+
+      '<span class="cap" style="width:42px;text-align:right;flex:none">'+r.pct+'%</span></div></td></tr>';
+  }).join('')||'<tr><td colspan="5" class="cap">暂无数据</td></tr>';
+  document.querySelectorAll('#page-traffic th.sortable').forEach(function(th){
+    th.classList.remove('sort-asc','sort-desc');
+    if(th.dataset.s===trSortKey)th.classList.add(trSortAsc?'sort-asc':'sort-desc');
+  });
+}
 function pullLog(){fetch('/api/log?lines=200').then(function(r){return r.json();})
   .then(function(ls){logLines=ls||[];renderLog();})
   .catch(function(){if(window.__demo){logLines=demo().auth.recent;renderLog();}});}
@@ -551,6 +935,7 @@ function pullLog(){fetch('/api/log?lines=200').then(function(r){return r.json();
 // ---------- 渲染 ----------
 var dailyDays=7, sortKey='total', sortAsc=false;
 function render(d){
+  lastStatus=d;
   document.getElementById('demoBadge').style.display=window.__demo?'inline-block':'none';
   document.getElementById('upd').textContent='更新于 '+d.time;
   var np=document.getElementById('netPill');
@@ -590,27 +975,12 @@ function render(d){
   }).join('')||'<tr><td colspan="6" class="cap">暂无设备数据</td></tr>';
 
   drawTrend(d.trend,'trendChart');
-  drawTrend(d.trend,'trendChart2');
 
   // 设备页
+  renderDevKpi(d);
   renderDevices(d);
 
-  // 系统页
-  document.getElementById('ringCpu').innerHTML=ring(d.cpu_pct,'var(--up)',80);
-  document.getElementById('ringMem').innerHTML=ring(d.mem_pct,'var(--down)',85);
-  document.getElementById('loadTxt').textContent='负载 '+(d.load||[]).join(' / ');
-  document.getElementById('memTxt').textContent='≥85% 建议清理';
-  document.getElementById('tempCard').innerHTML=
-    wrow('CPU 温度','<span class="'+(d.temp>=65?'warn':'')+'" style="font-size:20px;font-weight:700">'+
-      (d.temp||0).toFixed(1)+' °C</span>')+
-    wrow('告警阈值','≥ 65 °C')+
-    wrow('开机时长',fmtDur(d.uptime_s))+
-    wrow('系统时间',esc(d.time));
-  document.getElementById('svcList').innerHTML=(d.services||[]).map(function(s){
-    return '<div class="lrow">'+avatar(s.name.slice(0,2))+
-      '<div class="grow"><b>'+esc(s.name)+'</b></div>'+
-      (s.running?pill(true,'运行中',''):pill(false,'','已停止'))+'</div>';
-  }).join('')||'<div class="cap">读取中…</div>';
+  // 系统页数据独立接口按需拉取（pullSystem 渲染）
 
   // 认证摘要
   document.getElementById('aCnt').textContent=d.auth.count+' 次';
@@ -626,6 +996,34 @@ function wrow(k,v){return '<div class="lrow"><span class="cap" style="width:76px
   k+'</span><span class="grow" style="text-align:right">'+v+'</span></div>';}
 
 // ---------- 设备页（搜索/筛选/排序） ----------
+// ---------- 时长 / 相对时间（设备页状态副行） ----------
+function fmtDur(s){
+  s=Math.max(0,Math.floor(s));
+  if(s<60)return '刚刚';
+  var m=Math.floor(s/60);
+  if(m<60)return m+' 分钟';
+  var h=Math.floor(m/60),mm=m%60;
+  if(h<24)return h+' 小时'+(mm?' '+mm+' 分':'');
+  var d=Math.floor(h/24),hh=h%24;
+  return d+' 天'+(hh?' '+hh+' 小时':'');
+}
+function fmtAgo(ts){
+  var d=Date.now()/1000-ts;
+  if(d<60)return '刚刚';
+  var m=Math.floor(d/60);
+  if(m<60)return m+' 分钟前';
+  var h=Math.floor(m/60);
+  if(h<24)return h+' 小时前';
+  return Math.floor(h/24)+' 天前';
+}
+function seenClock(ts){
+  var d=new Date(ts*1000),now=new Date();
+  function p(n){return ('0'+n).slice(-2);}
+  var hm=p(d.getHours())+':'+p(d.getMinutes());
+  return d.toDateString()===now.toDateString()?'今天 '+hm:
+    p(d.getMonth()+1)+'-'+p(d.getDate())+' '+hm;
+}
+
 function renderDevices(d){
   var q=(document.getElementById('devSearch').value||'').toLowerCase();
   var fl=document.getElementById('devFilter').value;
@@ -635,18 +1033,34 @@ function renderDevices(d){
     if(!q)return true;
     return (v.name+' '+v.ip+' '+v.mac).toLowerCase().indexOf(q)>=0;});
   list.sort(function(a,b){
+    // 默认态（合计降序）：在线设备优先，组内按合计降序
+    if(sortKey==='total'&&!sortAsc){
+      if(a.online!==b.online)return a.online?-1:1;
+      return devTotal(b)-devTotal(a);}
     var va=sortKey==='total'?devTotal(a):a[sortKey], vb=sortKey==='total'?devTotal(b):b[sortKey];
     if(sortKey==='online'){va=a.online?1:0;vb=b.online?1:0;}
     if(typeof va==='string')return sortAsc?va.localeCompare(vb):vb.localeCompare(va);
     return sortAsc?va-vb:vb-va;});
   document.getElementById('devCount').textContent=list.length+' / '+d.devices.length+' 台';
+  function stSub(v){
+    if(v.online)return '已连接 '+fmtDur(v.conn_s);
+    if(v.last_seen)return '最后在线 '+fmtAgo(v.last_seen)+' · '+seenClock(v.last_seen);
+    return '—';}
+  function totalTxt(v){
+    return v.total_online>=60?fmtDur(v.total_online):'—';}
   document.getElementById('devRows').innerHTML=list.map(function(v){
-    return '<tr><td><div class="dev">'+avatar(v.name)+'<b>'+esc(v.name)+'</b></div></td>'+
-      '<td>'+esc(v.ip||'—')+'</td><td class="cap">'+esc(v.mac)+'</td>'+
-      '<td>'+pill(v.online,'在线','离线')+'</td>'+
+    var open=expandedMac===v.mac;
+    return '<tr class="devrow'+(open?' open':'')+'" data-mac="'+esc(v.mac)+'"><td><div class="dev">'+
+      avatar(v.name)+
+      '<span class="meta"><b>'+esc(v.name)+'</b><small>'+esc(v.mac)+'</small></span><span class="chev"></span></div></td>'+
+      '<td>'+esc(v.ip||'—')+'</td>'+
+      '<td><div class="stcell">'+pill(v.online,'在线','离线')+
+      '<span class="stsub">'+stSub(v)+'</span></div></td>'+
+      '<td class="r">'+totalTxt(v)+'</td>'+
       '<td class="r">'+fmtBps(v.down_bps)+'</td><td class="r">'+fmtBps(v.up_bps)+'</td>'+
       '<td class="r">'+fmtGB(v.rx)+'</td><td class="r">'+fmtGB(v.tx)+'</td>'+
-      '<td class="r"><b>'+fmtGB(devTotal(v))+'</b></td></tr>';
+      '<td class="r"><b>'+fmtGB(devTotal(v))+'</b></td></tr>'+
+      (open?'<tr class="destrow"><td colspan="9">'+destPanel(v.mac)+'</td></tr>':'');
   }).join('')||'<tr><td colspan="9" class="cap">无匹配设备</td></tr>';
   document.querySelectorAll('#page-devices th.sortable').forEach(function(th){
     th.classList.remove('sort-asc','sort-desc');
@@ -654,7 +1068,255 @@ function renderDevices(d){
   });
 }
 
-// ---------- 认证日志渲染 + 过滤（关键字着色） ----------
+// ---------- 设备流量去向（展开面板） ----------
+var expandedMac=null, destD={}, destCache={}, lastStatus=null;
+var DEST_COLORS=['#16a34a','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
+function fmtBytes(b){
+  if(b>=1073741824)return (b/1073741824).toFixed(2)+' GB';
+  if(b>=1048576)return (b/1048576).toFixed(1)+' MB';
+  if(b>=1024)return Math.round(b/1024)+' KB';
+  return b+' B';
+}
+function destHex(mac){return mac.replace(/[^a-zA-Z0-9]/g,'');}
+function destPanel(mac){
+  var d=destD[mac]||1;
+  return '<div class="destp">'+
+    '<div class="desthead"><span class="seg sm">'+
+      '<button data-destd="1" class="'+(d===1?'on':'')+'">今日</button>'+
+      '<button data-destd="7" class="'+(d===7?'on':'')+'">近 7 天</button></span>'+
+      '<span class="cap">按服务归属 · 加密 DNS / 共享 CDN 计入「其他」</span></div>'+
+    '<div id="destBody'+destHex(mac)+'" style="grid-column:1/-1;display:grid;'+
+      'grid-template-columns:190px 1fr;gap:22px;align-items:center">'+
+      destBody(mac,destCache[mac+':'+d])+'</div></div>';
+}
+function destBody(mac,t){
+  if(!t)return '<div class="dest-empty">加载中…</div>';
+  if(!t.total)
+    return '<div class="dest-empty">数据积累中：该设备在此时段暂无可归属流量，产生通信后自动出现</div>';
+  var rows=[],rest=0;
+  t.services.forEach(function(s){
+    if(rows.length<7&&s.name!=='其他')rows.push(s);else rest+=s.bytes;});
+  if(rest>0)rows.push({name:'其他',bytes:rest});
+  return donutSVG(rows,t.total)+destList(rows,t.total);
+}
+function donutSVG(rows,total){
+  var C=2*Math.PI*64,off=0,gap=rows.length>1?2:0;
+  var segs=rows.map(function(r,i){
+    var len=r.bytes/total*C;
+    var s='<circle cx="88" cy="88" r="64" fill="none" stroke="'+DEST_COLORS[i%DEST_COLORS.length]+
+      '" stroke-width="22" stroke-dasharray="'+Math.max(0,len-gap)+' '+(C-len+gap)+
+      '" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 88 88)"></circle>';
+    off+=len;return s;
+  }).join('');
+  return '<div class="donutwrap"><svg viewBox="0 0 176 176">'+segs+
+    '<text x="88" y="84" text-anchor="middle" class="donut-total">'+fmtBytes(total)+'</text>'+
+    '<text x="88" y="102" text-anchor="middle" class="donut-cap">总流量</text></svg></div>';
+}
+function destList(rows,total){
+  return '<div class="dlist">'+rows.map(function(r,i){
+    var pct=total?r.bytes/total*100:0,c=DEST_COLORS[i%DEST_COLORS.length];
+    return '<div class="drow"><i style="background:'+c+'"></i>'+
+      '<span class="nm">'+esc(r.name)+'</span>'+
+      '<span class="vl">'+fmtBytes(r.bytes)+' · '+pct.toFixed(1)+'%</span></div>'+
+      '<div class="dbar"><b style="width:'+pct+'%;background:'+c+'"></b></div>';
+  }).join('')+'</div>';
+}
+function pullDest(mac){
+  var d=destD[mac]||1,key=mac+':'+d;
+  if(destCache[key]){fillDestPanel(mac);return;}
+  fetch('/api/device_dest?mac='+encodeURIComponent(mac)+'&days='+d)
+    .then(function(r){return r.json();})
+    .then(function(t){destCache[key]=t;fillDestPanel(mac);})
+    .catch(function(){
+      if(window.__demo){destCache[key]=demoDest(mac);fillDestPanel(mac);}});
+}
+function fillDestPanel(mac){
+  var el=document.getElementById('destBody'+destHex(mac));
+  if(el)el.innerHTML=destBody(mac,destCache[mac+':'+(destD[mac]||1)]);
+}
+document.getElementById('devRows').addEventListener('click',function(e){
+  var btn=e.target.closest('button[data-destd]');
+  if(btn&&expandedMac){
+    destD[expandedMac]=parseInt(btn.dataset.destd,10);
+    renderDevices(lastStatus);
+    pullDest(expandedMac);
+    return;
+  }
+  var row=e.target.closest('tr.devrow');
+  if(!row)return;
+  var mac=row.dataset.mac;
+  expandedMac=expandedMac===mac?null:mac;
+  if(expandedMac&&!destD[mac])destD[mac]=1;
+  renderDevices(lastStatus);
+  if(expandedMac)pullDest(mac);
+});
+function demoDest(mac){
+  var G=1073741824;
+  return {total:3.42*G,services:[
+    {name:'微信',bytes:1.58*G},{name:'抖音/头条',bytes:0.74*G},
+    {name:'苹果',bytes:0.42*G},{name:'淘宝/阿里',bytes:0.28*G},
+    {name:'哔哩哔哩',bytes:0.14*G},{name:'其他',bytes:0.26*G}]};
+}
+
+// ---------- 设备页 KPI ----------
+function renderDevKpi(d){
+  var devs=d.devices,n=devs.length||1,now=Date.now()/1000;
+  var on=devs.filter(function(v){return v.online;});
+  var act=devs.filter(function(v){return v.last_seen&&now-v.last_seen<=86400;});
+  var longest=on.slice().sort(function(a,b){return b.conn_s-a.conn_s;})[0];
+  document.getElementById('devKpiRow').innerHTML=
+    kpi('设备总数', devs.length, '在线 '+on.length+' · 离线 '+(devs.length-on.length), 'var(--text)')+
+    kpi('当前在线', on.length, '在线率 '+Math.round(on.length/n*100)+'%', 'var(--ok)')+
+    kpi('24h 活跃', act.length, '占总数 '+Math.round(act.length/n*100)+'%', 'var(--brand)')+
+    kpi('最久在线', longest?fmtDur(longest.conn_s):'—', longest?longest.name:'暂无在线', 'var(--down)');
+}
+
+// ---------- 系统详情页（/api/system 按需拉取，停留在该页时随 2s 轮询） ----------
+var sysData=null, procSortKey='cpu';
+function pullSystem(){
+  fetch('/api/system').then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(s){sysData=s;renderSystem(s);})
+    .catch(function(){if(window.__demo){sysData=demo().system;renderSystem(sysData);}});
+}
+function kv(k,v){return '<div class="kv"><span class="cap">'+k+'</span><b>'+v+'</b></div>';}
+function fmtE(t){
+  var d=new Date(t*1000);function p(n){return (n<10?'0':'')+n;}
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function fmtStore(b){
+  if(b>=1073741824)return (b/1073741824).toFixed(2)+' GB';
+  if(b>=1048576)return (b/1048576).toFixed(1)+' MB';
+  if(b>=1024)return (b/1024).toFixed(1)+' KB';
+  return b+' B';
+}
+function hbar(nm,val,pct,color){
+  return '<div class="hbar-row"><span class="nm">'+nm+'</span>'+
+    '<span class="hbar"><i style="width:'+Math.max(Math.min(pct,100),0).toFixed(1)+'%;background:'+
+    color+'"></i></span><span class="val">'+val+'</span></div>';
+}
+function drawTemp(pts){
+  var W=1000,H=260,L=60,R=18,T=16,B=28,pw=W-L-R,ph=H-T-B;
+  if(!pts||pts.length<2){document.getElementById('tempChart').innerHTML=
+    '<div class="cap" style="padding:40px;text-align:center">温度数据采集中…</div>';return;}
+  var mn=Math.min.apply(null,pts.map(function(p){return p.temp;}));
+  var mx=Math.max.apply(null,pts.map(function(p){return p.temp;}));
+  var yMin=Math.floor(Math.min(mn,35)/5)*5;
+  var yMax=Math.ceil(Math.max(mx,66)/5)*5;
+  function X(i){return L+(pts.length===1?0:i*pw/(pts.length-1));}
+  function Y(v){return T+ph*(1-(v-yMin)/(yMax-yMin));}
+  var s='<svg viewBox="0 0 '+W+' '+H+'">';
+  for(var g=yMin;g<=yMax;g+=5){
+    var al=(g===65);
+    s+='<line x1="'+L+'" y1="'+Y(g)+'" x2="'+(W-R)+'" y2="'+Y(g)+'" style="stroke:'+
+      (al?'rgba(245,158,11,0.7)':'var(--grid)')+';stroke-width:1;'+(al?'stroke-dasharray:5 4':'')+'"/>';
+    s+='<text x="'+(L-8)+'" y="'+(Y(g)+4)+'" text-anchor="end" style="fill:'+
+      (al?'#f59e0b':'var(--muted)')+'">'+g+'°</text>';
+  }
+  var nt0=pts[0].t,ntN=pts[pts.length-1].t;
+  for(var k=0;k<5;k++){
+    var tt=nt0+(ntN-nt0)*k/4;
+    var d=new Date(tt*1000);
+    s+='<text x="'+(L+pw*k/4)+'" y="'+(H-8)+'" text-anchor="middle">'+
+      ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+'</text>';
+  }
+  var line=pts.map(function(p,i){return X(i).toFixed(1)+','+Y(p.temp).toFixed(1);}).join(' ');
+  var x0=X(0).toFixed(1),xn=X(pts.length-1).toFixed(1);
+  s+='<polygon points="'+x0+','+(T+ph)+' '+line+' '+xn+','+(T+ph)+'" style="fill:#f59e0b;fill-opacity:0.12"/>';
+  s+='<polyline points="'+line+'" style="fill:none;stroke:#f59e0b;stroke-width:2;stroke-linejoin:round"/>';
+  s+='</svg>';
+  document.getElementById('tempChart').innerHTML=s;
+}
+function renderSystem(s){
+  var memPct=s.mem.total?(s.mem.used_real/s.mem.total*100):0;
+  document.getElementById('sysKpis').innerHTML=
+    kpi('CPU',s.cpu_pct.toFixed(0),'%','var(--up)')+
+    kpi('内存',memPct.toFixed(0),'%','var(--down)')+
+    kpi('温度',s.temp.toFixed(1),'°C',s.temp>=65?'#f59e0b':'var(--brand)')+
+    kpi('负载',s.load[0],'','var(--purple)')+
+    kpi('运行',fmtDur(s.uptime_s),'','var(--brand)')+
+    kpi('设备',esc(s.device.hostname),'','var(--muted)');
+
+  document.getElementById('devInfo').innerHTML=
+    kv('设备型号',esc(s.device.model))+
+    kv('固件版本',esc(s.device.distro))+
+    kv('内核版本',esc(s.device.kernel))+
+    kv('CPU 架构',esc(s.device.arch))+
+    kv('目标平台',esc(s.device.target))+
+    kv('版本修订',esc(s.device.revision))+
+    kv('主机名',esc(s.device.hostname))+
+    kv('本次开机',s.device.boot?fmtE(s.device.boot):'-');
+
+  document.getElementById('ringCpu').innerHTML=ring(s.cpu_pct,'var(--up)',80);
+  var cd=s.cpu_detail;
+  var coreHtml='';
+  if(cd&&cd.cores){
+    cd.cores.forEach(function(v,i){
+      coreHtml+=hbar('CPU'+i,v.toFixed(0)+'%',v,'var(--up)');});
+  }
+  document.getElementById('coreBars').innerHTML=coreHtml||'<span class="cap">采集中…</span>';
+  if(cd){
+    var a=cd.agg;
+    document.getElementById('cpuBreak').innerHTML=
+      '<div class="stk">'+
+      '<i style="width:'+a.user+'%;background:var(--up)" title="用户"></i>'+
+      '<i style="width:'+a.sys+'%;background:var(--purple)" title="内核"></i>'+
+      '<i style="width:'+a.iowait+'%;background:#f59e0b" title="IO等待"></i>'+
+      '<i style="width:'+a.irq+'%;background:var(--brand)" title="中断"></i>'+
+      '<i style="width:'+a.nice+'%;background:var(--muted)" title="nice"></i></div>'+
+      '<div class="lg"><span><i style="background:var(--up)"></i>用户 '+a.user.toFixed(1)+'%</span>'+
+      '<span><i style="background:var(--purple)"></i>内核 '+a.sys.toFixed(1)+'%</span>'+
+      '<span><i style="background:#f59e0b"></i>IO等待 '+a.iowait.toFixed(1)+'%</span>'+
+      '<span><i style="background:var(--brand)"></i>中断 '+a.irq.toFixed(1)+'%</span></div>';
+  }
+
+  document.getElementById('ringMem').innerHTML=ring(memPct,'var(--down)',85);
+  var m=s.mem;
+  document.getElementById('memRows').innerHTML=
+    kv('总量',fmtStore(m.total))+
+    kv('已用',fmtStore(m.used_real))+
+    kv('可用',fmtStore(m.avail))+
+    kv('缓存',fmtStore(m.cached))+
+    kv('缓冲',fmtStore(m.buffers));
+
+  document.getElementById('tempNow').textContent='当前 '+s.temp.toFixed(1)+' °C / 告警线 65 °C';
+  drawTemp(s.temp_hist);
+
+  document.getElementById('storeBars').innerHTML=(s.storage||[]).map(function(v){
+    return hbar(v.mount,v.pct+'%',v.pct,v.pct>=90?'#ef4444':'var(--brand)')+
+      '<div class="cap" style="margin:-4px 0 10px 50px">'+esc(v.fs)+' · 已用 '+
+      fmtStore(v.used)+' / '+fmtStore(v.total)+'</div>';
+  }).join('')||'<span class="cap">读取中…</span>';
+
+  document.getElementById('ifaceRows').innerHTML=(s.ifaces||[]).map(function(v){
+    return '<tr><td><b>'+esc(v.name)+'</b></td>'+
+      '<td>'+pill(v.op,'运行中','未连接')+'</td>'+
+      '<td>'+esc(v.ip||'—')+'</td>'+
+      '<td>'+esc(v.mac)+'</td>'+
+      '<td class="r">'+fmtStore(v.rx)+'</td><td class="r">'+fmtStore(v.tx)+'</td></tr>';
+  }).join('')||'<tr><td colspan="6" class="cap">读取中…</td></tr>';
+
+  var rows=(s.procs||[]).slice();
+  rows.sort(function(a,b){return procSortKey==='cpu'?b.cpu-a.cpu:b.rss-a.rss;});
+  document.getElementById('procRows').innerHTML=rows.slice(0,8).map(function(p){
+    var nm=p.name.length>26?p.name.slice(0,25)+'…':p.name;
+    return '<tr><td>'+p.pid+'</td><td title="'+esc(p.name)+'">'+esc(nm)+'</td>'+
+      '<td class="r">'+p.cpu.toFixed(1)+'</td><td class="r">'+fmtStore(p.rss)+'</td></tr>';
+  }).join('')||'<tr><td colspan="4" class="cap">首个采样周期进行中…</td></tr>';
+
+  document.getElementById('svcList').innerHTML=(s.services||[]).map(function(v){
+    return '<div class="lrow">'+avatar(v.name.slice(0,2))+
+      '<div class="grow"><b>'+esc(v.name)+'</b>'+
+      (v.running&&v.uptime!=null?'<div class="cap" style="line-height:1.3">已运行 '+
+        fmtDur(v.uptime)+'</div>':'')+'</div>'+
+      (v.running?pill(true,'运行中',''):pill(false,'','已停止'))+'</div>';
+  }).join('')||'<div class="cap">读取中…</div>';
+}
+document.getElementById('psCpu').onclick=function(){procSortKey='cpu';this.className='on';
+  document.getElementById('psMem').className='';if(sysData)renderSystem(sysData);};
+document.getElementById('psMem').onclick=function(){procSortKey='rss';this.className='on';
+  document.getElementById('psCpu').className='';if(sysData)renderSystem(sysData);};
+
+
 var logFilter='all';
 function renderLog(){
   var ls=logLines.filter(function(l){
@@ -679,9 +1341,16 @@ document.getElementById('h24').onclick=function(){histHours=24;this.className='o
 document.getElementById('h72').onclick=function(){histHours=72;this.className='on';
   document.getElementById('h24').className='';pullHist();};
 document.getElementById('d7').onclick=function(){dailyDays=7;this.className='on';
-  document.getElementById('d30').className='';pullDaily();};
+  document.getElementById('d30').className='';if(trafficData)drawDaily(trafficData.daily);};
 document.getElementById('d30').onclick=function(){dailyDays=30;this.className='on';
-  document.getElementById('d7').className='';pullDaily();};
+  document.getElementById('d7').className='';if(trafficData)drawDaily(trafficData.daily);};
+document.querySelectorAll('#page-traffic th.sortable').forEach(function(th){
+  th.addEventListener('click',function(){
+    if(trSortKey===th.dataset.s)trSortAsc=!trSortAsc;
+    else{trSortKey=th.dataset.s;trSortAsc=false;}
+    if(trafficData)renderTrDevices(trafficData);
+  });
+});
 document.getElementById('btnLog').onclick=pullLog;
 document.getElementById('fAll').onclick=function(){logFilter='all';setFilter(this);};
 document.getElementById('fOk').onclick=function(){logFilter='SUCCESS';setFilter(this);};
@@ -699,7 +1368,7 @@ document.getElementById('btnTheme').onclick=function(){
   el.dataset.theme=el.dataset.theme==='dark'?'light':'dark';};
 
 var timer=null;
-function start(){pull();clearInterval(timer);timer=setInterval(pull,2000);}
+function start(){pull();clearInterval(timer);timer=setInterval(pull,1000);}
 route();
 start();
 </script>

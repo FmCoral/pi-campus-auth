@@ -16,6 +16,14 @@ venv/
 *.bak
 *.old
 
+# === 运行时数据（服务产生，不进版本库）===
+traffic_hist.json    # 分钟级流量历史（最多3天）
+device_seen.json     # 设备最后在线时间 + 累计在线时长
+traffic_dest.json    # 设备流量去向按天累计
+device_seen.json.tmp
+traffic_dest.json.tmp
+traffic_hist.json.tmp
+
 # === 系统 / IDE ===
 .DS_Store
 Thumbs.db
