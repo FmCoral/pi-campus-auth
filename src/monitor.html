@@ -182,7 +182,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
   <div class="kpis" id="kpiRow"></div>
   <div class="ov-grid">
     <div class="card" style="margin-bottom:0">
-      <h2>实时速率 <span class="cap h2r" style="font-weight:400">最近 5 分钟</span></h2>
+      <h2>实时速率 <span class="cap h2r" style="font-weight:400">最近 5 分钟 · 对数坐标</span></h2>
       <div class="chartbox"><svg id="trendChart" viewBox="0 0 1000 260"></svg></div>
       <div class="cap"><span style="color:var(--down)">■</span> 下行　<span style="color:var(--up)">■</span> 上行</div>
     </div>
@@ -211,7 +211,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
       <span class="h2r seg"><button id="h24" class="on">24 小时</button><button id="h72">3 天</button></span>
     </h2>
     <div class="chartbox"><svg id="histChart" viewBox="0 0 1000 280"></svg></div>
-    <div class="cap"><span style="color:var(--down)">■</span> 下行　<span style="color:var(--up)">■</span> 上行 · 每分钟一点 · 断电自动保存 · 保留 3 天</div>
+    <div class="cap"><span style="color:var(--down)">■</span> 下行　<span style="color:var(--up)">■</span> 上行 · 对数坐标 · 每分钟一点 · 断电自动保存 · 保留 3 天</div>
   </div>
   <div class="card">
     <h2>实时趋势 <span class="cap h2r" style="font-weight:400">最近 5 分钟</span></h2>
@@ -342,11 +342,10 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmtBps(b){
   if(!isFinite(b)||b<=0)return '0 B/s';
-  if(b<1024)return b.toFixed(0)+' B/s';
-  if(b<1048576)return (b/1024).toFixed(0)+' KB/s';
-  if(b<10485760)return (b/1048576).toFixed(1)+' MB/s';
-  if(b<1073741824)return (b/1048576).toFixed(0)+' MB/s';
-  return (b/1073741824).toFixed(2)+' GB/s';
+  if(b<1000)return b.toFixed(0)+' B/s';
+  if(b<1e6)return (b/1e3).toFixed(b<10e3?1:0)+' KB/s';
+  if(b<1e9)return (b/1e6).toFixed(b<10e6?1:0)+' MB/s';
+  return (b/1e9).toFixed(2)+' GB/s';
 }
 function fmtGB(b){
   if(!isFinite(b)||b<=0)return '0 G';
@@ -379,27 +378,48 @@ function avatar(name){
 function pill(ok,on,off){return '<span class="pill '+(ok?'ok':'off')+'"><span class="dot"></span>'+
   (ok?on:off)+'</span>';}
 
-// ---------- 通用折线图（带面积填充） ----------
-function lineChart(el, series, xlabels){
+// ---------- 通用折线图（带面积填充；useLog=true 时 Y 轴对数坐标，
+//            解决"平时几 KB/s、突发几百 KB/s"动态范围大导致曲线贴地的问题） ----------
+var BPS_FLOOR = 1000;   // 对数坐标下限 1 KB/s（试过 100B/s：心跳噪声被放大成满屏毛刺，放弃）
+function lineChart(el, series, xlabels, useLog){
   var vb=el.getAttribute('viewBox').split(' ');
-  var W=+vb[0],H=+vb[1],L=64,R=14,T=14,B=26,pw=W-L-R,ph=H-T-B;
-  var mx=0;series.forEach(function(s){s.pts.forEach(function(p){mx=Math.max(mx,p.y);});});
-  mx=niceMax(mx*1.05);
+  // viewBox 格式为 "minX minY 宽 高"，宽高在第 2/3 个分量（此前误取 minX/minY 导致 W=H=0，
+  // 折线全部画到可视区外——三张折线图集体"不显示"的根因）
+  var W=+vb[2],H=+vb[3],L=64,R=14,T=14,B=26,pw=W-L-R,ph=H-T-B;
+  var vmax=0;series.forEach(function(s){s.pts.forEach(function(p){vmax=Math.max(vmax,p.y);});});
   var n=Math.max.apply(null,series.map(function(s){return s.pts.length;}));
   if(n<2){el.innerHTML='';return;}
-  var X=function(i){return L+pw*i/(n-1);}, Y=function(v){return T+ph*(1-v/mx);};
+  var X=function(i){return L+pw*i/(n-1);}, Y, grids;
+  if(useLog){
+    // 顶格值向上取整到一个数量级，且至少为下限的 10 倍（保证有一个 decade 的展示区间）
+    var top=Math.max(vmax*1.05, BPS_FLOOR*10);
+    mx=Math.pow(10,Math.ceil(Math.log(top)/Math.LN10));
+    var lg=Math.log(mx/BPS_FLOOR);
+    Y=function(v){v=Math.max(Math.min(v,mx),BPS_FLOOR);
+      return T+ph*(1-Math.log(v/BPS_FLOOR)/lg);};
+    grids=[];
+    for(var d=mx;d>=BPS_FLOOR;d/=10)grids.push(d);   // 1MB/s,100K,10K,1K…
+  }else{
+    mx=niceMax(vmax*1.05);
+    Y=function(v){return T+ph*(1-v/mx);};
+    grids=[mx,mx*0.5,0];
+  }
   var s='';
-  [1,0.5,0].forEach(function(f){
-    var gy=T+ph*(1-f);
-    s+='<line x1="'+L+'" y1="'+gy+'" x2="'+(W-R)+'" y2="'+gy+'" stroke="var(--border)"/>';
-    s+='<text x="'+(L-8)+'" y="'+(gy+4)+'" text-anchor="end">'+fmtBps(mx*f)+'</text>';
+  grids.forEach(function(g){
+    var gy=Y(g);
+    s+='<line x1="'+L+'" y1="'+gy.toFixed(1)+'" x2="'+(W-R)+'" y2="'+gy.toFixed(1)+
+       '" style="stroke:var(--border)"/>';
+    s+='<text x="'+(L-8)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end">'+fmtBps(g)+'</text>';
   });
   series.forEach(function(sr){
-    var pts=sr.pts.map(function(p){return X(p.x).toFixed(1)+','+Y(p.y).toFixed(1);}).join(' ');
-    var area=sr.pts[0].x+','+(T+ph)+' '+pts+' '+sr.pts[sr.pts.length-1].x+','+(T+ph);
-    s+='<polygon points="'+area+'" fill="'+sr.color+'" opacity="0.13"/>';
-    s+='<polyline points="'+pts+'" fill="none" stroke="'+sr.color+
-       '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    var ptsArr=sr.pts.map(function(p){return X(p.x).toFixed(1)+','+Y(p.y).toFixed(1);});
+    var pts=ptsArr.join(' ');
+    // 闭合点必须用映射后的像素 x（此前误用原始索引 0/n，导致左楔形 + 右点斜拉对角线）
+    var x0=ptsArr[0].split(',')[0], xn=ptsArr[ptsArr.length-1].split(',')[0];
+    var area=x0+','+(T+ph)+' '+pts+' '+xn+','+(T+ph);
+    s+='<polygon points="'+area+'" style="fill:'+sr.color+';fill-opacity:0.13"/>';
+    s+='<polyline points="'+pts+'" style="fill:none;stroke:'+sr.color+
+       ';stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>';
   });
   (xlabels||[]).forEach(function(xl){
     s+='<text x="'+X(xl.i)+'" y="'+(H-6)+'" text-anchor="middle">'+xl.txt+'</text>';
@@ -414,13 +434,15 @@ function drawTrend(trend,elId){
     {pts:trend.map(function(p,i){return {x:i,y:p.down};}),color:'var(--down)'},
     {pts:trend.map(function(p,i){return {x:i,y:p.up};}),color:'var(--up)'}
   ],[{i:0,txt:hhmm(trend[0].t)},{i:Math.floor((trend.length-1)/2),txt:hhmm(trend[Math.floor((trend.length-1)/2)].t)},
-     {i:trend.length-1,txt:hhmm(trend[trend.length-1].t)}]);
+     {i:trend.length-1,txt:hhmm(trend[trend.length-1].t)}],true);
 }
 
 // ---------- 分钟级图（24h/72h，按像素桶取峰值降采样） ----------
 var histHours=24;
+var RATE_CAP=125e6;   // 1Gbps 线速上限，超过视为计数器异常坏点，绘图时剔除
 function drawHist(hist){
   var el=document.getElementById('histChart');
+  hist=(hist||[]).filter(function(p){return p.down<=RATE_CAP&&p.up<=RATE_CAP;});
   if(!hist||hist.length<2){
     el.innerHTML='<text x="500" y="140" text-anchor="middle">正在积累数据（每分钟一个点）</text>';return;}
   var n=hist.length, BUCKETS=200, step=n/BUCKETS, ptsD=[],ptsU=[],i;
@@ -444,7 +466,7 @@ function drawHist(hist){
   }
   lineChart(el,[
     {pts:ptsD,color:'var(--down)'},{pts:ptsU,color:'var(--up)'}
-  ],labels);
+  ],labels,true);
 }
 
 // ---------- 按天柱状图 ----------
@@ -459,14 +481,15 @@ function drawDaily(daily){
   var s='';
   [1,0.5,0].forEach(function(f){
     var gy=T+ph*(1-f);
-    s+='<line x1="'+L+'" y1="'+gy+'" x2="'+(W-R)+'" y2="'+gy+'" stroke="var(--border)"/>';
+    s+='<line x1="'+L+'" y1="'+gy+'" x2="'+(W-R)+'" y2="'+gy+
+       '" style="stroke:var(--border)"/>';
     s+='<text x="'+(L-8)+'" y="'+(gy+4)+'" text-anchor="end">'+fmtGB(mx*f)+'</text>';
   });
   var skip=Math.ceil(n/10);
   daily.forEach(function(d,i){
     var bx=L+step*i+(step-bw)/2, by=Y(d.total), bh=T+ph-by;
     s+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
-       '" height="'+Math.max(bh,1).toFixed(1)+'" rx="4" fill="var(--bar2)" opacity="0.8"/>';
+       '" height="'+Math.max(bh,1).toFixed(1)+'" rx="4" style="fill:var(--bar2);opacity:0.8"/>';
     if(n<=14||i%skip==0)
       s+='<text x="'+(bx+bw/2).toFixed(1)+'" y="'+(by-5).toFixed(1)+
          '" text-anchor="middle" style="fill:var(--text);font-weight:600">'+fmtGB(d.total)+'</text>';
@@ -483,9 +506,9 @@ function ring(pct,color,warn){
   var C=2*Math.PI*44;
   var col=warn&&pct>=warn?'var(--warn)':color;
   return '<svg viewBox="0 0 120 120">'+
-    '<circle cx="60" cy="60" r="44" fill="none" stroke="var(--border)" stroke-width="10"/>'+
-    '<circle cx="60" cy="60" r="44" fill="none" stroke="'+col+'" stroke-width="10" '+
-      'stroke-linecap="round" stroke-dasharray="'+(C*pct/100).toFixed(1)+' '+C.toFixed(1)+'" '+
+    '<circle cx="60" cy="60" r="44" style="fill:none;stroke:var(--border);stroke-width:10"/>'+
+    '<circle cx="60" cy="60" r="44" style="fill:none;stroke:'+col+';stroke-width:10;'+
+      'stroke-linecap:round;stroke-dasharray:'+(C*pct/100).toFixed(1)+' '+C.toFixed(1)+'" '+
       'transform="rotate(-90 60 60)"/>'+
     '<text x="60" y="66" text-anchor="middle" style="fill:var(--text);font-size:22px;'+
       'font-weight:700">'+pct.toFixed(0)+'%</text></svg>';

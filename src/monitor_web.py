@@ -30,6 +30,7 @@ HIST_DAYS = 3                # 分钟级历史保留天数
 HIST_MAX = HIST_DAYS * 1440  # 4320 点
 TREND_MAX = 60               # 5 分钟趋势（5s 一个点）
 SAMPLER_EVERY = 5            # 采样周期（秒）
+LINK_CAP = 125_000_000       # 1Gbps 线速；超过视为计数器异常，钳制（防坏点破坏图表缩放）
 
 LOCK = threading.Lock()
 STATE = {
@@ -47,11 +48,18 @@ STATE = {
 
 
 def load_hist():
-    """启动时恢复分钟级历史，丢弃超期点"""
+    """启动时恢复分钟级历史，丢弃超期点并清洗超线速坏点"""
     try:
         pts = json.load(open(HIST_FILE))
         cutoff = time.time() - HIST_DAYS * 86400
-        return [p for p in pts if p.get('t', 0) >= cutoff][-HIST_MAX:]
+        out = []
+        for p in pts:
+            if p.get('t', 0) < cutoff:
+                continue
+            if p.get('up', 0) > LINK_CAP or p.get('down', 0) > LINK_CAP:
+                continue                      # 历史坏点直接剔除
+            out.append(p)
+        return out[-HIST_MAX:]
     except Exception:
         return []
 
@@ -119,6 +127,8 @@ def sampler():
             dt = max(now - last_t, 0.01)
             down = (rx - last_rx) / dt if rx >= last_rx else 0
             up = (tx - last_tx) / dt if tx >= last_tx else 0
+            down = min(down, LINK_CAP)
+            up = min(up, LINK_CAP)
             last_rx, last_tx, last_t = rx, tx, now
 
             idle, total = read_cpu()
@@ -150,9 +160,9 @@ def sampler():
             # 分钟级流量点 + 3 天持久化
             if n % 12 == 11:
                 hd = max(now - h_t, 0.01)
-                h_up = (tx - h_rx) / hd if tx >= h_rx else 0
-                h_dn = (rx - h_rx) / hd if rx >= h_rx else 0
-                h_rx, h_tx, h_t = tx, rx, now
+                h_up = min((tx - h_tx) / hd if tx >= h_tx else 0, LINK_CAP)
+                h_dn = min((rx - h_rx) / hd if rx >= h_rx else 0, LINK_CAP)
+                h_rx, h_tx, h_t = rx, tx, now
                 with LOCK:
                     STATE['hist'].append({'t': int(now), 'up': h_up, 'down': h_dn})
                     del STATE['hist'][:-HIST_MAX]
@@ -297,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
             m = re.search(r'[?&]lines=(\d+)', self.path)
             self._send(200, 'application/json',
                        json.dumps(api_log(m.group(1) if m else 200)).encode())
-        elif self.path in ('/', '/index.html'):
+        elif self.path.split('?')[0] in ('/', '/index.html'):
             try:
                 self._send(200, 'text/html; charset=utf-8', open(HTML_PATH, 'rb').read())
             except Exception:
@@ -309,7 +319,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
+        # 三重禁缓存：避免浏览器复用旧页面/旧数据（改版后必须即时生效）
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
         self.end_headers()
         self.wfile.write(body)
 
