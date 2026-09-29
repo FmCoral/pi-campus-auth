@@ -103,7 +103,10 @@ input:focus{border-color:var(--brand)}
 @media (max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}
   .kpi .v{font-size:18px;white-space:normal}}
 
-.ov-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;margin-bottom:16px;align-items:start}
+.ov-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;margin-bottom:16px}
+.trend-card{display:flex;flex-direction:column}
+.trend-card .chartbox{flex:1;min-height:0}
+.trend-card .chartbox svg{height:100%}
 @media (max-width:900px){.ov-grid{grid-template-columns:1fr}}
 .chartbox{position:relative}
 .chartbox svg{width:100%;height:auto;display:block}
@@ -262,7 +265,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
 <div class="page active" id="page-overview">
   <div class="kpis" id="kpiRow"></div>
   <div class="ov-grid">
-    <div class="card" style="margin-bottom:0">
+    <div class="card trend-card" style="margin-bottom:0">
       <h2>实时速率 <span class="cap h2r" style="font-weight:400">最近 5 分钟 · 对数坐标</span></h2>
       <div class="chartbox"><svg id="trendChart" viewBox="0 0 1000 260"></svg></div>
       <div class="cap"><span style="color:var(--down)">■</span> 下行　<span style="color:var(--up)">■</span> 上行</div>
@@ -432,6 +435,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
     <div class="chip"><div class="k">认证成功（尾部 200 行）</div><div class="v" id="aCnt">-</div></div>
     <div class="chip"><div class="k">最近成功时间</div><div class="v" id="aLast">-</div></div>
     <div class="chip"><div class="k">尾部 FAIL 次数</div><div class="v" id="aFail">-</div></div>
+  </div>
+  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <strong>网络异常？</strong>
+    <button id="btnAuthRun">立即重新认证</button>
+    <span id="authRunMsg" class="cap">掉线时点击此处，无需命令行（面板走内网，断网也能打开）</span>
   </div>
   <div class="card">
     <h2>认证日志
@@ -605,6 +613,8 @@ function lineChart(el, series, xlabels, useLog, extras){
   });
   (xlabels||[]).forEach(function(xl){
     var anchor=xl.anchor||'middle';
+    // 未指定对齐时，靠近右边界的标签自动右对齐，避免被裁
+    if(!xl.anchor && X(xl.i) >= L+pw*0.82) anchor='end';
     var lx=X(xl.i)+(anchor==='start'?3:anchor==='end'?-3:0);
     s+='<text x="'+lx.toFixed(1)+'" y="'+(H-6)+'" text-anchor="'+anchor+'" style="font-size:13px">'+xl.txt+'</text>';
   });
@@ -1322,6 +1332,7 @@ function renderLog(){
   var ls=logLines.filter(function(l){
     if(logFilter==='all')return true;
     return l.indexOf(logFilter)>=0;});
+  ls=ls.slice().reverse();   // 最新记录排在最上面，打开即见，无需下翻
   document.getElementById('aLog').innerHTML=ls.map(function(l){
     if(l.indexOf('SUCCESS')>=0)return '<span class="ok">'+esc(l)+'</span>';
     if(l.indexOf('FAIL')>=0)return '<span class="bad">'+esc(l)+'</span>';
@@ -1352,6 +1363,30 @@ document.querySelectorAll('#page-traffic th.sortable').forEach(function(th){
   });
 });
 document.getElementById('btnLog').onclick=pullLog;
+// ---------- 手动重新认证（应急自救，走 LAN 不依赖外网）----------
+var authRunning=false;
+document.getElementById('btnAuthRun').onclick=function(){
+  if(authRunning)return;
+  authRunning=true;
+  var btn=this,msg=document.getElementById('authRunMsg');
+  btn.disabled=true;btn.textContent='认证中…';
+  msg.style.color='var(--muted)';
+  msg.textContent='正在执行完整认证链，约需 10–40 秒，请勿重复点击…';
+  fetch('/api/auth_run',{method:'POST'})
+   .then(function(r){return r.json();})
+   .then(function(d){
+     msg.style.color=d.ok?'var(--down)':'var(--bad,#ef4444)';
+     msg.textContent='['+d.ts+'] '+(d.ok?'✓ ':'✗ ')+d.msg;
+   })
+   .catch(function(e){
+     msg.style.color='var(--bad,#ef4444)';
+     msg.textContent='请求失败：'+e+'（若面板能打开但此项失败，请点“刷新”看日志）';
+   })
+   .finally(function(){
+     authRunning=false;btn.disabled=false;btn.textContent='立即重新认证';
+     pullLog();
+   });
+};
 document.getElementById('fAll').onclick=function(){logFilter='all';setFilter(this);};
 document.getElementById('fOk').onclick=function(){logFilter='SUCCESS';setFilter(this);};
 document.getElementById('fBad').onclick=function(){logFilter='FAIL';setFilter(this);};

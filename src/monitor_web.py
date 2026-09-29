@@ -966,6 +966,54 @@ def auth_info():
     return {'count': len(succ), 'last': last, 'fail': len(fail), 'recent': lines[-5:]}
 
 
+AUTH_SCRIPT = '/root/auto_auth.py'
+AUTH_LOCK = threading.Lock()
+_auth_mod = None
+
+
+def auth_module():
+    """按绝对路径加载 /root/auto_auth.py（不依赖运行目录是否在 sys.path）"""
+    global _auth_mod
+    if _auth_mod is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('auto_auth', AUTH_SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _auth_mod = mod
+    return _auth_mod
+
+
+def run_auth():
+    """面板手动触发一次完整认证。返回 {ok,msg,ts,online}
+    兼容两版 auto_auth：新版 load_credentials()+authenticate(u,p)，
+    旧版凭据内置、authenticate() 无参。"""
+    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        aa = auth_module()
+    except Exception as e:
+        return {'ok': False, 'msg': '加载认证脚本失败: %s' % e, 'ts': ts}
+    if hasattr(aa, 'load_credentials'):
+        user, pwd = aa.load_credentials()
+        if not user or not pwd:
+            return {'ok': False, 'msg': '账号密码未配置（/root/auto_auth.conf）', 'ts': ts}
+    if aa.is_online():
+        return {'online': True, 'ok': True, 'msg': '网络正常，无需重新认证', 'ts': ts}
+    if hasattr(aa, 'load_credentials'):
+        ok, msg = aa.authenticate(user, pwd)
+    else:
+        ok, msg = aa.authenticate()
+    # 同步追加到认证日志，和 cron 记录保持一致
+    try:
+        with open(AUTH_LOG, 'a') as f:
+            f.write('[%s] manual re-auth from panel\n' % ts)
+            f.write('[%s] manual re-auth %s: %s\n'
+                    % (time.strftime('%Y-%m-%d %H:%M:%S'),
+                       'SUCCESS' if ok else 'FAIL', msg))
+    except Exception:
+        pass
+    return {'online': False, 'ok': ok, 'msg': msg, 'ts': ts}
+
+
 def api_status():
     with LOCK:
         trend = list(STATE['trend'])
@@ -1078,6 +1126,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, 'text/html; charset=utf-8', open(HTML_PATH, 'rb').read())
             except Exception:
                 self._send(404, 'text/plain; charset=utf-8', 'monitor.html 缺失'.encode())
+        else:
+            self._send(404, 'text/plain; charset=utf-8', b'not found')
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == '/api/auth_run':
+            try:                    # 丢弃请求体
+                n = int(self.headers.get('Content-Length', 0) or 0)
+                if n > 0:
+                    self.rfile.read(min(n, 4096))
+            except Exception:
+                pass
+            with AUTH_LOCK:         # 串行，防止重复并发认证
+                try:
+                    r = run_auth()
+                except Exception as e:
+                    r = {'ok': False,
+                         'msg': 'internal: %s: %s' % (type(e).__name__, e),
+                         'ts': time.strftime('%Y-%m-%d %H:%M:%S')}
+            self._send(200, 'application/json', json.dumps(r).encode())
         else:
             self._send(404, 'text/plain; charset=utf-8', b'not found')
 
