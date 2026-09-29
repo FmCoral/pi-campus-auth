@@ -35,14 +35,16 @@ DEST_DAYS = 30
 CONNTRACK_FILE = '/proc/net/nf_conntrack'
 HIST_DAYS = 3                # 分钟级历史保留天数
 HIST_MAX = HIST_DAYS * 1440  # 4320 点
-TREND_MAX = 60               # 5 分钟趋势（5s 一个点）
-SAMPLER_EVERY = 5            # 采样周期（秒）
+TREND_MAX = 300              # 5 分钟趋势（1s 一个点）
+SAMPLE_EVERY = 1             # 主采样周期（秒）
+RATE_WIN = 5.0               # 速率滑动窗口（秒）：每秒输出过去 5 秒平均，平滑无跳变
+HEAVY_EVERY = 5              # 较重探测（stations/在线检测/进程快照）周期
 LINK_CAP = 125_000_000       # 1Gbps 线速；超过视为计数器异常，钳制（防坏点破坏图表缩放）
 
 # ---- 系统详情页（/api/system）----
 CLK_TCK = os.sysconf('SC_CLK_TCK')          # 用户态 HZ，通常 100
 PAGE_SZ = os.sysconf('SC_PAGE_SIZE')        # 内存页 4096
-TEMP_HIST_MAX = 720                         # 温度缓冲：1 小时（5s 一点，内存，重启清零）
+TEMP_HIST_MAX = 3600                        # 温度缓冲：1 小时（1s 一点，内存，重启清零）
 NET_IFACES = ['eth0', 'phy0-ap0', 'br-lan']
 SERVICE_ANCHORS = [                         # 关键守护进程（进程名子串）
     ('OLED 状态屏', 'oled_status.py'),
@@ -598,7 +600,7 @@ def proc_snapshot():
     return snap
 
 
-def proc_top(prev, cur):
+def proc_top(prev, cur, interval=HEAVY_EVERY):
     """两次快照 → Top 进程（CPU% 相对单核 + RSS 字节），取 CPU/RSS 各自前列的并集"""
     rows = []
     for pid, c in cur.items():
@@ -609,7 +611,7 @@ def proc_top(prev, cur):
         if dticks < 0:
             continue
         rows.append({'pid': pid, 'name': c['comm'],
-                     'cpu': dticks * 100 / (SAMPLER_EVERY * CLK_TCK),
+                     'cpu': dticks * 100 / (interval * CLK_TCK),
                      'rss': c['rss'] * PAGE_SZ})
     top_cpu = sorted(rows, key=lambda x: x['cpu'], reverse=True)[:6]
     top_mem = sorted(rows, key=lambda x: x['rss'], reverse=True)[:6]
@@ -664,89 +666,118 @@ def api_system():
 
 
 def sampler():
-    """后台采样线程：所有耗时探测都在这里做，API 处理零阻塞"""
+    """后台采样线程：所有耗时探测都在这里做，API 处理零阻塞。
+
+    每秒一轮：整机/设备速率均由过去 RATE_WIN 秒的滑动窗口算出，
+    读数每秒平滑更新；较重的探测按 HEAVY_EVERY / 更长周期分级执行。"""
     last_rx, last_tx = get_net_bytes()
-    last_t = time.time()
-    h_rx, h_tx, h_t = last_rx, last_tx, last_t     # 分钟级窗口
-    prev_cpu_s = read_cpu_stat()                   # CPU 全字段（分核/分类）
-    prev_proc = proc_snapshot()                    # 进程 tick 快照
+    t_start = time.time()
+    rate_win = [(t_start, last_rx, last_tx)]        # 整机滑动窗口 (t,rx,tx)
+    h_rx, h_tx, h_t = last_rx, last_tx, t_start     # 分钟级窗口
+    prev_cpu_s = read_cpu_stat()
+    prev_proc = proc_snapshot()
     prev_ctrs = read_nft_counters()
-    prev_ctr_t = time.time()
+    dev_win = {h: [(t_start, c['up'], c['down'])]    # 每设备滑动窗口
+               for h, c in prev_ctrs.items()}
     STATE['hist'] = load_hist()
     with LOCK:
         STATE['seen'] = load_seen()
         STATE['dest'] = load_dest()
+    stations = {}
     prev_online = set()
+    seen_touch = {}
     n = 0
     while True:
-        time.sleep(SAMPLER_EVERY)
+        time.sleep(SAMPLE_EVERY)
         try:
             now = time.time()
-            rx, tx = get_net_bytes()
-            dt = max(now - last_t, 0.01)
-            down = (rx - last_rx) / dt if rx >= last_rx else 0
-            up = (tx - last_tx) / dt if tx >= last_tx else 0
-            down = min(down, LINK_CAP)
-            up = min(up, LINK_CAP)
-            last_rx, last_tx, last_t = rx, tx, now
 
+            # ---- 整机速率：5 秒滑动窗口（每秒输出，无台阶）----
+            rx, tx = get_net_bytes()
+            rate_win.append((now, rx, tx))
+            while len(rate_win) > 2 and now - rate_win[1][0] > RATE_WIN:
+                rate_win.pop(0)
+            span = max(now - rate_win[0][0], 0.01)
+            down = min((rx - rate_win[0][1]) / span if rx >= rate_win[0][1] else 0,
+                       LINK_CAP)
+            up = min((tx - rate_win[0][2]) / span if tx >= rate_win[0][2] else 0,
+                     LINK_CAP)
+
+            # ---- 设备速率：nft 计数器每秒读，各自 5 秒滑动窗口 ----
+            leases = read_leases()
+            ctrs = read_nft_counters()
+            for h in set(dev_win) - set(ctrs):       # 计数器已删除的设备清窗
+                del dev_win[h]
+            dev_rate = {}
+            for h, cur in ctrs.items():
+                w = dev_win.get(h)
+                if w is None:
+                    dev_win[h] = [(now, cur['up'], cur['down'])]
+                    continue
+                w.append((now, cur['up'], cur['down']))
+                while len(w) > 2 and now - w[1][0] > RATE_WIN:
+                    w.pop(0)
+                b = w[0]
+                dspan = max(now - b[0], 0.01)
+                d_up = (cur['up'] - b[1]) / dspan
+                d_dn = (cur['down'] - b[2]) / dspan
+                if d_up >= 0 and d_dn >= 0:          # 计数器重建负差：跳过
+                    dev_rate[h] = {'up': min(d_up, LINK_CAP),
+                                   'down': min(d_dn, LINK_CAP)}
+
+            # ---- CPU：/proc/stat 极廉价，每秒算（比值法，与间隔无关）----
             cur_cpu_s = read_cpu_stat()
             cpu_d = cpu_breakdown(prev_cpu_s, cur_cpu_s)
             cpu = cpu_d['agg']['busy']
             prev_cpu_s = cur_cpu_s
 
-            cur_proc = proc_snapshot()             # Top 进程（CPU% + RSS）
-            top_procs = proc_top(prev_proc, cur_proc)
-            prev_proc = cur_proc
-
-            leases = read_leases()
-            ctrs = read_nft_counters()
-            stations = read_stations()
-            gone = prev_online - set(stations)    # 本轮消失的设备 = 刚离线
-            dev_rate = {}
-            for h, cur in ctrs.items():
-                prev = prev_ctrs.get(h)
-                if prev:
-                    d_up = (cur['up'] - prev['up']) / (now - prev_ctr_t)
-                    d_dn = (cur['down'] - prev['down']) / (now - prev_ctr_t)
-                    if d_up >= 0 and d_dn >= 0:      # 计数器重建会出现负差，跳过
-                        dev_rate[h] = {'up': d_up, 'down': d_dn}
-            prev_ctrs, prev_ctr_t = ctrs, now
-
             with LOCK:
                 STATE['trend'].append({'t': int(now), 'up': up, 'down': down})
                 del STATE['trend'][:-TREND_MAX]
-                STATE['online'] = check_online()
-                STATE['clients'] = get_clients()
                 STATE['cpu_pct'] = cpu
                 STATE['cpu_detail'] = cpu_d
-                STATE['procs'] = top_procs
                 STATE['temp_hist'].append({'t': int(now), 'temp': get_temp()})
                 del STATE['temp_hist'][:-TEMP_HIST_MAX]
                 STATE['dev_rate'] = dev_rate
                 STATE['leases'] = leases
-                STATE['stations'] = stations
-                for mac in stations:              # 在线设备：刷新最后在线 + 累加累计在线
-                    rec = STATE['seen'].get(mac)
-                    if not rec:
-                        rec = {'s': int(now), 't': 0}
-                    rec['s'] = int(now)
-                    rec['t'] += SAMPLER_EVERY
-                    STATE['seen'][mac] = rec
 
-            if gone:
-                save_seen()                        # 设备刚离线：立即固化
-            prev_online = set(stations)
-            if n % 12 == 0:
-                save_seen()                        # 每 60 秒落盘（断电最多丢 1 分钟累计）
+            # ---- 5 秒级较重探测：stations / 在线检测 / Top 进程 ----
+            if n % HEAVY_EVERY == 0:
+                stations = read_stations()
+                cur_proc = proc_snapshot()
+                top_procs = proc_top(prev_proc, cur_proc, HEAVY_EVERY)
+                prev_proc = cur_proc
+                gone = prev_online - set(stations)   # 本轮消失 = 刚离线
+                with LOCK:
+                    STATE['online'] = check_online()
+                    STATE['clients'] = get_clients()
+                    STATE['procs'] = top_procs
+                    STATE['stations'] = stations
+                    for mac in stations:             # 最后在线刷新 + 按实际秒数累计
+                        rec = STATE['seen'].get(mac)
+                        if not rec:
+                            rec = {'s': int(now), 't': 0}
+                        rec['s'] = int(now)
+                        dt_seen = int(now - seen_touch.get(mac, now))
+                        seen_touch[mac] = now
+                        rec['t'] += max(dt_seen, 0)
+                        STATE['seen'][mac] = rec
+                for mac in set(seen_touch) - set(stations):
+                    del seen_touch[mac]
+                if gone:
+                    save_seen()                      # 设备刚离线：立即固化
+                prev_online = set(stations)
 
-            if n % 2 == 0:                         # 每 10 秒做流量归属累计
+            if n % 60 == 0:
+                save_seen()                         # 每 60 秒落盘
+
+            if n % 10 == 0:                         # 每 10 秒做流量归属累计
                 sample_dest(leases)
-                if n % 12 == 0:
-                    save_dest()
+            if n % 60 == 0:
+                save_dest()
 
-            # 分钟级流量点 + 3 天持久化
-            if n % 12 == 11:
+            # 分钟级流量点 + 3 天持久化（按真实时间跨 60 秒触发）
+            if now - h_t >= 60:
                 hd = max(now - h_t, 0.01)
                 h_up = min((tx - h_tx) / hd if tx >= h_tx else 0, LINK_CAP)
                 h_dn = min((rx - h_rx) / hd if rx >= h_rx else 0, LINK_CAP)
@@ -754,13 +785,13 @@ def sampler():
                 with LOCK:
                     STATE['hist'].append({'t': int(now), 'up': h_up, 'down': h_dn})
                     del STATE['hist'][:-HIST_MAX]
-            if n % 24 == 0:
+            if n % 120 == 0:
                 save_hist()
 
-            if n % 6 == 0:                            # 半分钟刷一次足够
+            if n % 30 == 0:                          # 半分钟刷一次 WAN 信息
                 STATE['wan_ip'] = get_wan_ip()
                 STATE['gateway'] = get_gateway()
-            if n % 60 == 0:                           # 5 分钟刷一次服务状态
+            if n % 300 == 0:                         # 5 分钟刷一次服务状态
                 STATE['services'] = get_services()
             n += 1
         except Exception:

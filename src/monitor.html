@@ -1210,23 +1210,22 @@ function drawTemp(pts){
     '<div class="cap" style="padding:40px;text-align:center">温度数据采集中…</div>';return;}
   var mn=Math.min.apply(null,pts.map(function(p){return p.temp;}));
   var mx=Math.max.apply(null,pts.map(function(p){return p.temp;}));
-  var yMin=Math.floor(Math.min(mn,35)/5)*5;
-  var yMax=Math.ceil(Math.max(mx,66)/5)*5;
+  // Y 轴自适应：以数据为中心，上下各留 2°C 空间，至少显示 6°C 范围
+  var yMin=Math.floor(mn/2)*2-2;
+  var yMax=Math.ceil(mx/2)*2+2;
+  if(yMax-yMin<6){ yMax=yMin+6; }
   function X(i){return L+(pts.length===1?0:i*pw/(pts.length-1));}
   function Y(v){return T+ph*(1-(v-yMin)/(yMax-yMin));}
   var s='<svg viewBox="0 0 '+W+' '+H+'">';
-  for(var g=yMin;g<=yMax;g+=5){
-    var al=(g===65);
-    s+='<line x1="'+L+'" y1="'+Y(g)+'" x2="'+(W-R)+'" y2="'+Y(g)+'" style="stroke:'+
-      (al?'rgba(245,158,11,0.7)':'var(--grid)')+';stroke-width:1;'+(al?'stroke-dasharray:5 4':'')+'"/>';
-    s+='<text x="'+(L-8)+'" y="'+(Y(g)+4)+'" text-anchor="end" style="fill:'+
-      (al?'#f59e0b':'var(--muted)')+'">'+g+'°</text>';
+  for(var g=yMin;g<=yMax;g+=2){
+    s+='<line x1="'+L+'" y1="'+Y(g)+'" x2="'+(W-R)+'" y2="'+Y(g)+'" style="stroke:var(--grid);stroke-width:1;"/>';
+    s+='<text x="'+(L-8)+'" y="'+(Y(g)+4)+'" text-anchor="end" style="fill:var(--muted)">'+g+'°</text>';
   }
   var nt0=pts[0].t,ntN=pts[pts.length-1].t;
-  for(var k=0;k<5;k++){
-    var tt=nt0+(ntN-nt0)*k/4;
+  for(var k=0;k<7;k++){
+    var tt=nt0+(ntN-nt0)*k/6;
     var d=new Date(tt*1000);
-    s+='<text x="'+(L+pw*k/4)+'" y="'+(H-8)+'" text-anchor="middle">'+
+    s+='<text x="'+(L+pw*k/6)+'" y="'+(H-8)+'" text-anchor="middle">'+
       ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+'</text>';
   }
   var line=pts.map(function(p,i){return X(i).toFixed(1)+','+Y(p.temp).toFixed(1);}).join(' ');
