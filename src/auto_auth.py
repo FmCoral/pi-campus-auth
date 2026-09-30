@@ -14,7 +14,7 @@ import subprocess, base64, tempfile, os, sys, time, uuid
 # 凭据配置文件路径（部署时与脚本同目录 /root）
 CONF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auto_auth.conf')
 # 多探测目标：任一通则视为在线（8.8.8.8 在部分校园网会被封，故用国内 DNS 为主）
-PROBE_HOSTS = ["223.5.5.5", "119.29.29.29", "8.8.8.8"]
+PROBE_HOSTS = ["223.5.5.5", "180.76.76.76", "8.8.8.8"]
 PROBE_TIMEOUT = 3  # ping 超时秒数
 
 

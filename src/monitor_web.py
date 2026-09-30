@@ -41,6 +41,12 @@ RATE_WIN = 5.0               # 速率滑动窗口（秒）：每秒输出过去 
 HEAVY_EVERY = 5              # 较重探测（stations/在线检测/进程快照）周期
 LINK_CAP = 125_000_000       # 1Gbps 线速；超过视为计数器异常，钳制（防坏点破坏图表缩放）
 
+# ---- 电源管理 ----
+SHUTDOWN_SCRIPT = '/root/do_shutdown.py'
+SHUTDOWN_KEY = '623'             # 立即关机密钥
+SHED_HH, SHED_MM = 23, 20        # 每日定时关机时间
+CRON_MARKER = 'hwipi-sched-shutdown'
+
 # ---- 系统详情页（/api/system）----
 CLK_TCK = os.sysconf('SC_CLK_TCK')          # 用户态 HZ，通常 100
 PAGE_SZ = os.sysconf('SC_PAGE_SIZE')        # 内存页 4096
@@ -209,6 +215,57 @@ def save_dest():
         os.replace(tmp, DEST_FILE)
     except Exception:
         pass
+
+
+# ---------- 电源管理：定时关机 / 立即关机 ----------
+SHUTDOWN_ARMED = {'v': False}          # 关机流程一旦触发即锁定，防重复
+
+
+def crontab_read():
+    try:
+        r = subprocess.run(['crontab', '-l'], capture_output=True, timeout=8)
+        return r.stdout.decode().splitlines() if r.returncode == 0 else []
+    except Exception:
+        return []
+
+
+def sched_shutdown_enabled():
+    """crontab 中存在带标记的关机任务即视为启用"""
+    return any(CRON_MARKER in l and 'do_shutdown.py' in l for l in crontab_read())
+
+
+def sched_shutdown_set(enable):
+    """重写 crontab：去掉旧标记行，启用时加入每日关机行；返回最新状态"""
+    lines = [l for l in crontab_read() if CRON_MARKER not in l]
+    if enable:
+        lines.append('%d %d * * * %s >> /root/shutdown.log 2>&1  # %s'
+                     % (SHED_MM, SHED_HH, SHUTDOWN_SCRIPT, CRON_MARKER))
+    text = '\n'.join(lines).rstrip() + '\n'
+    try:
+        subprocess.run(['crontab', '-'], input=text.encode(), timeout=8)
+    except Exception:
+        pass
+    return sched_shutdown_enabled()
+
+
+def shutdown_now(key):
+    """立即关机：校验密钥 → 本进程全部数据落盘 → 启动善后脚本（其内部停 OLED 末次存盘）"""
+    if key != SHUTDOWN_KEY:
+        return {'ok': False, 'msg': '密钥错误'}
+    if SHUTDOWN_ARMED['v']:
+        return {'ok': False, 'msg': '关机流程已在执行中'}
+    save_hist()
+    save_seen()
+    save_dest()
+    SHUTDOWN_ARMED['v'] = True
+    try:
+        logf = open('/root/shutdown.log', 'a')
+        subprocess.Popen(['/usr/bin/python3', SHUTDOWN_SCRIPT],
+                         stdout=logf, stderr=subprocess.STDOUT)
+    except Exception as e:
+        SHUTDOWN_ARMED['v'] = False
+        return {'ok': False, 'msg': '启动关机失败: %s' % e}
+    return {'ok': True, 'msg': '数据已保存，系统将在几秒后关机'}
 
 
 # ---------- DNS 原始套接字嗅探（零系统改动）----------
@@ -662,7 +719,9 @@ def api_system():
             'procs': procs, 'temp_hist': thist,
             'services': get_services(), 'uptime_s': uptime,
             'cpu_pct': STATE.get('cpu_pct', 0), 'temp': get_temp(),
-            'mem_pct': get_mem_pct(), 'load': open('/proc/loadavg').read().split()[:3]}
+            'mem_pct': get_mem_pct(), 'load': open('/proc/loadavg').read().split()[:3],
+            'shutdown': {'sched_enabled': sched_shutdown_enabled(),
+                         'sched_time': '%02d:%02d' % (SHED_HH, SHED_MM)}}
 
 
 def sampler():
@@ -1176,6 +1235,27 @@ class Handler(BaseHTTPRequestHandler):
                     r = {'ok': False,
                          'msg': 'internal: %s: %s' % (type(e).__name__, e),
                          'ts': time.strftime('%Y-%m-%d %H:%M:%S')}
+            self._send(200, 'application/json', json.dumps(r).encode())
+        elif path == '/api/shutdown':
+            try:
+                n = int(self.headers.get('Content-Length', 0) or 0)
+                body = self.rfile.read(min(max(n, 0), 4096)) if n > 0 else b'{}'
+                p = json.loads(body or b'{}')
+            except Exception:
+                p = {}
+            mode = p.get('mode')
+            try:
+                if mode == 'now':
+                    r = shutdown_now(str(p.get('key', '')))
+                elif mode == 'sched':
+                    en = bool(p.get('enabled'))
+                    r = {'ok': True, 'enabled': sched_shutdown_set(en),
+                         'msg': '定时关机已' + ('启用' if en else '关闭')}
+                else:
+                    r = {'ok': False, 'msg': '未知操作'}
+            except Exception as e:
+                r = {'ok': False,
+                     'msg': 'internal: %s: %s' % (type(e).__name__, e)}
             self._send(200, 'application/json', json.dumps(r).encode())
         else:
             self._send(404, 'text/plain; charset=utf-8', b'not found')

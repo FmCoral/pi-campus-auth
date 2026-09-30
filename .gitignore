@@ -10,6 +10,9 @@ __pycache__/
 .venv/
 venv/
 
+# 字模生成工具的临时产物
+tools/cjk_font_snippet.py
+
 # === 日志与临时文件 ===
 *.log
 *.tmp

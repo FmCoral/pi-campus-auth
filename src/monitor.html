@@ -79,6 +79,37 @@ input:focus{border-color:var(--brand)}
 .badge{font-size:12px;padding:2px 10px;border-radius:999px;border:1px solid var(--warn);
   color:var(--warn);display:none}
 
+/* ---- 电源管理卡片 ---- */
+.power-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pwr-zone{background:var(--chip);border:1px solid var(--border);border-radius:12px;
+  padding:13px 15px;display:flex;flex-direction:column}
+.pwr-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pwr-head b{font-size:13.5px}
+.pwr-head .cap{font-size:11.5px}
+.pwr-zone .cap{line-height:1.55}
+.pwr-now{display:flex;gap:8px;margin:10px 0 2px}
+.pwr-now input{flex:1;min-width:0}
+.btn-danger{background:var(--bad);border-color:var(--bad);color:#fff;white-space:nowrap}
+.btn-danger:hover{border-color:var(--bad);opacity:.92}
+.btn-danger:disabled{opacity:.5;cursor:not-allowed}
+.pwr-confirm{display:none;align-items:center;gap:8px;margin-top:10px}
+.pwr-confirm.show{display:flex}
+.pwr-confirm .cap{color:var(--warn);font-weight:500}
+.pw-msg{min-height:18px;margin-top:6px}
+.pw-msg.err{color:var(--bad)}
+.pw-msg.ok{color:var(--ok)}
+.pw-msg.warn{color:var(--warn)}
+/* 开关 */
+.switch{position:relative;display:inline-block;width:42px;height:24px;flex:none}
+.switch input{opacity:0;width:0;height:0;margin:0}
+.switch .sl{position:absolute;inset:0;background:#9ca3af;border-radius:24px;
+  cursor:pointer;transition:.2s}
+.switch .sl::before{content:"";position:absolute;height:18px;width:18px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .sl{background:var(--brand)}
+.switch input:checked + .sl::before{transform:translateX(18px)}
+@media (max-width:680px){.power-grid{grid-template-columns:1fr}}
+
 /* ---- 卡片 ---- */
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;
   padding:16px 18px;margin-bottom:16px;box-shadow:var(--shadow)}
@@ -366,6 +397,32 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
 <!-- ============ 系统状态 ============ -->
 <div class="page" id="page-system">
   <div class="kpis" id="sysKpis"></div>
+
+  <div class="card">
+    <h2>电源管理</h2>
+    <div class="power-grid">
+      <div class="pwr-zone">
+        <div class="pwr-head"><b>定时关机</b>
+          <label class="switch"><input type="checkbox" id="pwSched"><span class="sl"></span></label></div>
+        <div class="cap">每日 <b id="pwSchedTime">23:20</b> 自动关机；关机前自动保存全部数据，OLED 显示“已关机”后即可拔掉电源</div>
+        <div class="cap pw-msg" id="pwSchedMsg"></div>
+      </div>
+      <div class="pwr-zone">
+        <div class="pwr-head"><b>立即关机</b><span class="cap">需要密钥</span></div>
+        <div class="pwr-now">
+          <input type="password" id="pwKey" inputmode="numeric" maxlength="8"
+            autocomplete="off" placeholder="请输入密钥">
+          <button id="pwNowBtn" class="btn-danger">立即关机</button>
+        </div>
+        <div class="pwr-confirm" id="pwConfirm">
+          <span class="cap">确认关机？</span>
+          <button id="pwYes" class="btn-danger">确认</button>
+          <button id="pwNo">取消</button>
+        </div>
+        <div class="cap pw-msg" id="pwMsg"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="card">
     <h2>设备信息</h2>
@@ -1245,6 +1302,10 @@ function renderSystem(s){
     kpi('运行',fmtDur(s.uptime_s),'','var(--brand)')+
     kpi('设备',esc(s.device.hostname),'','var(--muted)');
 
+  var sh=s.shutdown||{};
+  document.getElementById('pwSchedTime').textContent=sh.sched_time||'23:20';
+  document.getElementById('pwSched').checked=!!sh.sched_enabled;
+
   document.getElementById('devInfo').innerHTML=
     kv('设备型号',esc(s.device.model))+
     kv('固件版本',esc(s.device.distro))+
@@ -1324,6 +1385,68 @@ document.getElementById('psCpu').onclick=function(){procSortKey='cpu';this.class
   document.getElementById('psMem').className='';if(sysData)renderSystem(sysData);};
 document.getElementById('psMem').onclick=function(){procSortKey='rss';this.className='on';
   document.getElementById('psCpu').className='';if(sysData)renderSystem(sysData);};
+
+/* ---- 电源管理 ---- */
+document.getElementById('pwSched').onchange=function(){
+  var msg=document.getElementById('pwSchedMsg'),en=this.checked;
+  msg.className='cap pw-msg';msg.textContent='设置中…';
+  fetch('/api/shutdown',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mode:'sched',enabled:en})})
+   .then(function(r){return r.json();})
+   .then(function(d){
+     if(d.ok){
+       msg.className='cap pw-msg ok';
+       msg.textContent='定时关机已'+(d.enabled?'启用':'关闭');
+       setTimeout(function(){if(msg.textContent.indexOf('定时关机')===0)msg.textContent='';},4000);
+     }else{
+       msg.className='cap pw-msg err';msg.textContent=d.msg||'设置失败';
+     }
+   })
+   .catch(function(){
+     msg.className='cap pw-msg err';msg.textContent='网络错误，设置失败';});
+};
+
+document.getElementById('pwNowBtn').onclick=function(){
+  var key=document.getElementById('pwKey').value;
+  var msg=document.getElementById('pwMsg');
+  msg.className='cap pw-msg';msg.textContent='';
+  if(!key){
+    msg.className='cap pw-msg err';msg.textContent='请输入密钥';
+    return;
+  }
+  document.getElementById('pwConfirm').classList.add('show');
+};
+
+document.getElementById('pwNo').onclick=function(){
+  document.getElementById('pwConfirm').classList.remove('show');
+};
+
+document.getElementById('pwYes').onclick=function(){
+  var key=document.getElementById('pwKey').value;
+  var msg=document.getElementById('pwMsg');
+  var yesBtn=this;
+  msg.className='cap pw-msg';msg.textContent='正在执行关机…';
+  yesBtn.disabled=true;
+  fetch('/api/shutdown',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mode:'now',key:key})})
+   .then(function(r){return r.json();})
+   .then(function(d){
+     if(d.ok){
+       document.getElementById('pwConfirm').classList.remove('show');
+       msg.className='cap pw-msg ok';
+       msg.textContent=d.msg+'；OLED 显示“已关机”后即可拔掉电源';
+       document.getElementById('pwNowBtn').disabled=true;
+       document.getElementById('pwKey').disabled=true;
+     }else{
+       msg.className='cap pw-msg err';msg.textContent=d.msg||'关机失败';
+       yesBtn.disabled=false;
+       document.getElementById('pwConfirm').classList.remove('show');
+     }
+   })
+   .catch(function(){
+     msg.className='cap pw-msg err';msg.textContent='网络错误，关机失败';
+     yesBtn.disabled=false;});
+};
 
 
 var logFilter='all';
