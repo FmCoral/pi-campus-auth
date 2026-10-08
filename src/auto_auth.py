@@ -95,7 +95,9 @@ def rsa_encrypt(public_key_b64, plaintext):
 
 
 def is_online():
-    """探测是否还能上网：任一探测目标 ping 通则在线"""
+    """探测是否还能上网：ping 通 + HTTP 不被校园网劫持才算在线"""
+    # 1. ping 探测（任一通则网络层可达）
+    ping_ok = False
     for host in PROBE_HOSTS:
         try:
             r = subprocess.run(
@@ -103,9 +105,26 @@ def is_online():
                 capture_output=True, timeout=PROBE_TIMEOUT + 3
             )
             if r.returncode == 0:
-                return True
+                ping_ok = True
+                break
         except Exception:
             pass
+    if not ping_ok:
+        return False
+
+    # 2. HTTP 劫持检测：访问 baidu.com，若返回 eportal 重定向脚本说明被劫持
+    try:
+        r = subprocess.run(
+            ['wget', '-qO-', '--timeout=5', 'http://www.baidu.com'],
+            capture_output=True, timeout=8
+        )
+        body = r.stdout.decode('utf-8', 'replace')
+        if 'eportal' in body or '10.100.0.12' in body:
+            return False  # 被校园网劫持，实际未认证
+        if r.returncode == 0 and body.strip():
+            return True  # 拿到真实响应，在线
+    except Exception:
+        pass
     return False
 
 

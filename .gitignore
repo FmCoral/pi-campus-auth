@@ -13,6 +13,10 @@ venv/
 # 字模生成工具的临时产物
 tools/cjk_font_snippet.py
 
+# 临时调试脚本
+_*.py
+_*.sh
+
 # === 日志与临时文件 ===
 *.log
 *.tmp

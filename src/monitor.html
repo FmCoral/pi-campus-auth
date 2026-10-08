@@ -243,6 +243,8 @@ svg text{fill:var(--muted);font-size:11px}
 .lg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--muted)}
 .lg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
 .h2right{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400}
+/* 温度卡标题栏：窄屏隐藏「当前/告警」副标题（系统页 KPI 行已有当前温度），避免与分段按钮挤行 */
+@media (max-width:1200px){.temp-now{display:none}}
 
 pre{background:var(--code);color:#c9d1d9;border-radius:10px;padding:14px;font-size:12px;
   line-height:1.7;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all;
@@ -449,7 +451,14 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:4px 0 22px}
 
   <div class="grid sys2">
     <div class="card">
-      <h2>温度趋势 · 最近 1 小时<span class="h2right" id="tempNow"></span></h2>
+      <h2>温度趋势<span class="h2r">
+        <span class="cap temp-now" id="tempNow"></span>
+        <span class="seg" id="tempRange">
+          <button data-r="1" class="on">1 小时</button>
+          <button data-r="24">24 小时</button>
+          <button data-r="72">3 天</button>
+        </span>
+      </span></h2>
       <div class="chartbox" id="tempChart"></div>
     </div>
     <div class="card">
@@ -525,6 +534,10 @@ function mkDemo(){
   var daily=[];for(var k=11;k>=0;k--)daily.push({date:day(k),total:(2+Math.abs(Math.sin(k*1.7))*9)*1073741824});
   var tempHist=[];for(var h=719;h>=0;h--){var ts=Math.sin(h/40)*1.5+Math.sin(h/7)*0.5;
     tempHist.push({t:now-h*5,temp:42+ts+Math.max(0,Math.sin(h/160)*6)});}
+  var curBucket=Math.floor(now/1800);
+  var temp30=[];for(var q=144;q>=1;q--){var ts30=Math.sin(q/8)*1.2+Math.max(0,Math.sin(q/30)*4);
+    temp30.push({t:(curBucket-q)*1800,temp:+(44+ts30).toFixed(1)});}
+  temp30.push({t:curBucket*1800,temp:47.3});   // 当前未闭合桶（对齐墙钟半小时）
   var system={
     uptime_s:86400*3+7231, cpu_pct:11, temp:47.3, mem_pct:38, load:["0.12","0.20","0.18"],
     device:{model:"Raspberry Pi 4 Model B Rev 1.4",
@@ -549,6 +562,7 @@ function mkDemo(){
       {pid:345,name:"dnsmasq -C /var/etc/dnsmasq.conf.cfg01411c",cpu:0.2,rss:4*1048576},
       {pid:890,name:"crond -f -l 8",cpu:0.1,rss:1.2*1048576}],
     temp_hist:tempHist,
+    temp30:temp30,
     services:[
       {name:"OLED 状态屏",running:true,uptime:86400*2},
       {name:"Web 监控",running:true,uptime:86400},
@@ -1261,9 +1275,21 @@ function hbar(nm,val,pct,color){
     '<span class="hbar"><i style="width:'+Math.max(Math.min(pct,100),0).toFixed(1)+'%;background:'+
     color+'"></i></span><span class="val">'+val+'</span></div>';
 }
-function drawTemp(pts){
+var tempRange='1';        // 温度时间档：1=1小时秒级（内存）/24/72=半小时平均点（持久化）
+function tempPts(s){
+  if(tempRange==='1')return s.temp_hist||[];
+  var hrs=tempRange==='24'?24:72;
+  var cutoff=Date.now()/1000-hrs*3600;
+  return (s.temp30||[]).filter(function(p){return p.t>=cutoff;});
+}
+function renderTemp(s){
+  document.getElementById('tempNow').textContent='当前 '+s.temp.toFixed(1)+' °C / 告警线 65 °C';
+  drawTemp(tempPts(s),tempRange);
+}
+function drawTemp(pts,range){
   var W=1000,H=260,L=60,R=18,T=16,B=28,pw=W-L-R,ph=H-T-B;
-  if(!pts||pts.length<2){document.getElementById('tempChart').innerHTML=
+  var el=document.getElementById('tempChart');
+  if(!pts||pts.length<2){el.innerHTML=
     '<div class="cap" style="padding:40px;text-align:center">温度数据采集中…</div>';return;}
   var mn=Math.min.apply(null,pts.map(function(p){return p.temp;}));
   var mx=Math.max.apply(null,pts.map(function(p){return p.temp;}));
@@ -1278,19 +1304,50 @@ function drawTemp(pts){
     s+='<line x1="'+L+'" y1="'+Y(g)+'" x2="'+(W-R)+'" y2="'+Y(g)+'" style="stroke:var(--grid);stroke-width:1;"/>';
     s+='<text x="'+(L-8)+'" y="'+(Y(g)+4)+'" text-anchor="end" style="fill:var(--muted)">'+g+'°</text>';
   }
-  var nt0=pts[0].t,ntN=pts[pts.length-1].t;
-  for(var k=0;k<7;k++){
-    var tt=nt0+(ntN-nt0)*k/6;
-    var d=new Date(tt*1000);
-    s+='<text x="'+(L+pw*k/6)+'" y="'+(H-8)+'" text-anchor="middle">'+
-      ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+'</text>';
+  // 65°C 告警线（仅当落在显示范围内）
+  if(yMin<=65&&65<=yMax){
+    s+='<line x1="'+L+'" y1="'+Y(65)+'" x2="'+(W-R)+'" y2="'+Y(65)+
+      '" style="stroke:#f59e0b;stroke-width:1;stroke-dasharray:5 4;stroke-opacity:0.85"/>';
+    s+='<text x="'+(W-R-2)+'" y="'+(Y(65)-4)+'" text-anchor="end" style="fill:#f59e0b">65° 告警</text>';
   }
+  // X 轴标签：1 小时按均匀 7 点；24h/3d 取整点 + 跨天首点显示月-日
+  var labels=[];
+  if(range==='1'){
+    var nt0=pts[0].t,ntN=pts[pts.length-1].t;
+    for(var k=0;k<7;k++){
+      var d=new Date((nt0+(ntN-nt0)*k/6)*1000);
+      labels.push({i:k/6*(pts.length-1),
+        txt:('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
+        anchor:k===0?'start':(k===6?'end':'middle')});
+    }
+  }else{
+    var everyH=range==='24'?4:6, MINI=range==='24'?6:9;
+    var seen={},prevDay='';
+    for(var i=0;i<pts.length;i++){
+      var dt=new Date(pts[i].t*1000),h=dt.getHours(),m=dt.getMinutes();
+      var dayKey=('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2);
+      var dayStart=dayKey!==prevDay;if(dayStart)prevDay=dayKey;
+      if(dayStart&&!seen[dayKey+'d']){
+        seen[dayKey+'d']=1;seen[dayKey+h]=1;
+        labels.push({i:i,txt:dayKey,anchor:'start'});
+      }else if((!labels.length||i-labels[labels.length-1].i>=MINI)&&
+               m===0&&h%everyH===0&&!seen[dayKey+h]){
+        seen[dayKey+h]=1;
+        labels.push({i:i,txt:('0'+h).slice(-2)+':00',anchor:'middle'});
+      }
+    }
+  }
+  labels.forEach(function(l){           // 右边缘标签自动左伸，避免超出绘图区
+    if(L+l.i*pw/(pts.length-1)>L+pw*0.82)l.anchor='end';
+    s+='<text x="'+X(l.i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="'+l.anchor+
+      '" style="fill:var(--muted)">'+l.txt+'</text>';
+  });
   var line=pts.map(function(p,i){return X(i).toFixed(1)+','+Y(p.temp).toFixed(1);}).join(' ');
   var x0=X(0).toFixed(1),xn=X(pts.length-1).toFixed(1);
   s+='<polygon points="'+x0+','+(T+ph)+' '+line+' '+xn+','+(T+ph)+'" style="fill:#f59e0b;fill-opacity:0.12"/>';
   s+='<polyline points="'+line+'" style="fill:none;stroke:#f59e0b;stroke-width:2;stroke-linejoin:round"/>';
   s+='</svg>';
-  document.getElementById('tempChart').innerHTML=s;
+  el.innerHTML=s;
 }
 function renderSystem(s){
   var memPct=s.mem.total?(s.mem.used_real/s.mem.total*100):0;
@@ -1348,8 +1405,7 @@ function renderSystem(s){
     kv('缓存',fmtStore(m.cached))+
     kv('缓冲',fmtStore(m.buffers));
 
-  document.getElementById('tempNow').textContent='当前 '+s.temp.toFixed(1)+' °C / 告警线 65 °C';
-  drawTemp(s.temp_hist);
+  renderTemp(s);
 
   document.getElementById('storeBars').innerHTML=(s.storage||[]).map(function(v){
     return hbar(v.mount,v.pct+'%',v.pct,v.pct>=90?'#ef4444':'var(--brand)')+
@@ -1473,6 +1529,13 @@ document.getElementById('h24').onclick=function(){histHours=24;this.className='o
   document.getElementById('h72').className='';pullHist();};
 document.getElementById('h72').onclick=function(){histHours=72;this.className='on';
   document.getElementById('h24').className='';pullHist();};
+document.getElementById('tempRange').addEventListener('click',function(e){
+  var b=e.target;if(b.tagName!=='BUTTON')return;
+  tempRange=b.getAttribute('data-r');
+  this.querySelectorAll('button').forEach(function(x){x.className='';});
+  b.className='on';
+  if(sysData)renderTemp(sysData);    // 数据已在内存，切换瞬时完成，刷新时档位自动保持
+});
 document.getElementById('d7').onclick=function(){dailyDays=7;this.className='on';
   document.getElementById('d30').className='';if(trafficData)drawDaily(trafficData.daily);};
 document.getElementById('d30').onclick=function(){dailyDays=30;this.className='on';

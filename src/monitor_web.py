@@ -11,6 +11,8 @@
 # 数据复用 oled_status.py 的采集函数（同目录 import，单一数据源）。
 # 后台线程每 5s 采样；分钟流量点每 60s 一个，持久化 /root/traffic_hist.json
 # （默认保留 3 天，每 2 分钟原子落盘一次，重启/关机最多丢 2 分钟）。
+# 温度：1 小时秒级点仅留内存；另按每半小时平均存一点到 /root/temp30_hist.json
+# （3 天 144 点，桶闭合即原子落盘，重启不丢失）。
 # 部署：/root/monitor_web.py + /root/monitor.html，procd 服务 /etc/init.d/monitorweb
 # 防火墙：wan 区 input REJECT，校园网侧访问不到；仅 LAN 可看。
 
@@ -32,6 +34,10 @@ HIST_FILE = '/root/traffic_hist.json'
 SEEN_FILE = '/root/device_seen.json'   # 设备最后在线时间 {mac_lower: ts}，离线设备展示用
 DEST_FILE = '/root/traffic_dest.json'  # 设备流量去向（按天/按服务）{days:{date:{mac:{svc:bytes}}}}
 DEST_DAYS = 30
+TEMP30_FILE = '/root/temp30_hist.json'  # 温度半小时平均点（持久化，3 天 144 点）
+TEMP30_SEC = 1800                      # 桶长：30 分钟
+TEMP30_DAYS = 3
+TEMP30_MAX = TEMP30_DAYS * 48          # 3 天 × 48 桶 = 144 点
 CONNTRACK_FILE = '/proc/net/nf_conntrack'
 HIST_DAYS = 3                # 分钟级历史保留天数
 HIST_MAX = HIST_DAYS * 1440  # 4320 点
@@ -74,6 +80,7 @@ STATE = {
     'leases': {},           # {ip: (mac, hostname)}
     'services': [],         # [{'name','running','uptime'}]
     'temp_hist': [],        # [{'t','temp'}] 最近 1 小时
+    'temp30': [],           # [{'t','temp'}] 半小时平均点，3 天（启动从 TEMP30_FILE 恢复）
     'procs': [],            # [{'pid','name','cpu','rss'}] Top 进程
     'cpu_detail': None,     # {'agg': 分类占比, 'cores': [4]}
     'stations': {},         # 在线 station {mac_lower: {'conn':秒,'txr':协商Mbps,'rxr':Mbps}}
@@ -81,6 +88,40 @@ STATE = {
     'dns_ip': {},           # {公网IP: (域名, ts)}，DNS 嗅探线程维护，conntrack 归属用
     'dest': {'days': {}},   # 流量去向累计，启动时从 DEST_FILE 载入
 }
+
+# 当前未闭合的半小时桶累加（仅内存；落盘文件只含已闭合桶）
+TEMP_ACC = {'k': 0, 's': 0.0, 'n': 0}
+
+
+def load_temp30():
+    """启动恢复半小时平均点：丢弃超期点与未闭合桶，文件损坏返回空"""
+    try:
+        pts = json.load(open(TEMP30_FILE))
+        now = time.time()
+        cutoff = now - TEMP30_DAYS * 86400
+        cur_k = int(now) // TEMP30_SEC
+        out = []
+        for p in pts:
+            t = p.get('t', 0)
+            if t < cutoff or t // TEMP30_SEC >= cur_k:
+                continue                      # 超期 / 属于当前未闭合桶（防御）
+            if isinstance(p.get('temp'), (int, float)):
+                out.append({'t': int(t), 'temp': float(p['temp'])})
+        return out[-TEMP30_MAX:]
+    except Exception:
+        return []
+
+
+def save_temp30():
+    tmp = TEMP30_FILE + '.tmp'
+    with LOCK:
+        pts = list(STATE['temp30'])
+    try:
+        with open(tmp, 'w') as f:
+            json.dump(pts, f)
+        os.replace(tmp, TEMP30_FILE)
+    except Exception:
+        pass
 
 
 def load_hist():
@@ -257,6 +298,7 @@ def shutdown_now(key):
     save_hist()
     save_seen()
     save_dest()
+    save_temp30()
     SHUTDOWN_ARMED['v'] = True
     try:
         logf = open('/root/shutdown.log', 'a')
@@ -708,6 +750,10 @@ def get_services():
 def api_system():
     with LOCK:
         thist = list(STATE['temp_hist'])
+        t30 = list(STATE['temp30'])
+        if TEMP_ACC['n']:                    # 末尾补当前桶的实时均值（不落盘）
+            t30.append({'t': TEMP_ACC['k'] * TEMP30_SEC,
+                        'temp': round(TEMP_ACC['s'] / TEMP_ACC['n'], 1)})
         procs = list(STATE['procs'])
         cpu_d = STATE['cpu_detail']
     try:
@@ -716,7 +762,7 @@ def api_system():
         uptime = 0
     return {'device': DEV_INFO, 'cpu_detail': cpu_d, 'mem': mem_detail(),
             'storage': storage_info(), 'ifaces': net_ifaces(),
-            'procs': procs, 'temp_hist': thist,
+            'procs': procs, 'temp_hist': thist, 'temp30': t30,
             'services': get_services(), 'uptime_s': uptime,
             'cpu_pct': STATE.get('cpu_pct', 0), 'temp': get_temp(),
             'mem_pct': get_mem_pct(), 'load': open('/proc/loadavg').read().split()[:3],
@@ -742,6 +788,7 @@ def sampler():
     with LOCK:
         STATE['seen'] = load_seen()
         STATE['dest'] = load_dest()
+        STATE['temp30'] = load_temp30()
     stations = {}
     prev_online = set()
     seen_touch = {}
@@ -790,15 +837,31 @@ def sampler():
             cpu = cpu_d['agg']['busy']
             prev_cpu_s = cur_cpu_s
 
+            tcur = get_temp()
+            temp30_due = False
             with LOCK:
                 STATE['trend'].append({'t': int(now), 'up': up, 'down': down})
                 del STATE['trend'][:-TREND_MAX]
                 STATE['cpu_pct'] = cpu
                 STATE['cpu_detail'] = cpu_d
-                STATE['temp_hist'].append({'t': int(now), 'temp': get_temp()})
+                STATE['temp_hist'].append({'t': int(now), 'temp': tcur})
                 del STATE['temp_hist'][:-TEMP_HIST_MAX]
+                # ---- 半小时平均桶：跨桶瞬间闭合旧桶（一点），当前桶每秒累加 ----
+                bk = int(now) // TEMP30_SEC
+                if bk != TEMP_ACC['k']:
+                    if TEMP_ACC['n']:
+                        STATE['temp30'].append(
+                            {'t': TEMP_ACC['k'] * TEMP30_SEC,
+                             'temp': round(TEMP_ACC['s'] / TEMP_ACC['n'], 1)})
+                        del STATE['temp30'][:-TEMP30_MAX]
+                    TEMP_ACC['k'], TEMP_ACC['s'], TEMP_ACC['n'] = bk, 0.0, 0
+                    temp30_due = True
+                TEMP_ACC['s'] += tcur
+                TEMP_ACC['n'] += 1
                 STATE['dev_rate'] = dev_rate
                 STATE['leases'] = leases
+            if temp30_due:
+                save_temp30()                       # 桶闭合即落盘，断电最多丢闭合后几秒
 
             # ---- 5 秒级较重探测：stations / 在线检测 / Top 进程 ----
             if n % HEAVY_EVERY == 0:
@@ -846,6 +909,7 @@ def sampler():
                     del STATE['hist'][:-HIST_MAX]
             if n % 120 == 0:
                 save_hist()
+                save_temp30()
 
             if n % 30 == 0:                          # 半分钟刷一次 WAN 信息
                 STATE['wan_ip'] = get_wan_ip()
