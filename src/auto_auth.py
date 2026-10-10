@@ -10,6 +10,7 @@
 
 import urllib.request, urllib.parse, http.cookiejar, ssl, re, json
 import subprocess, base64, tempfile, os, sys, time, uuid
+import gzip, zlib
 
 # 凭据配置文件路径（部署时与脚本同目录 /root）
 CONF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auto_auth.conf')
@@ -46,6 +47,24 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+# 完整浏览器请求头，模拟 Chrome，避免被 ePortal 识别为脚本而跳转到 SSO
+BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+              'AppleWebKit/537.36 (KHTML, like Gecko) '
+              'Chrome/120.0.0.0 Safari/537.36')
+BROWSER_HEADERS = {
+    'User-Agent': BROWSER_UA,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+}
+
+
 def make_opener():
     """构造 opener + cookiejar，每次认证用新会话"""
     cj = http.cookiejar.CookieJar()
@@ -54,21 +73,37 @@ def make_opener():
         urllib.request.HTTPSHandler(context=ctx),
         NoRedirect,
     )
-    opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
+    opener.addheaders = list(BROWSER_HEADERS.items())
     return opener, cj
 
 
+def _decode_body(headers, raw):
+    """按 Content-Encoding 解压（urllib 不会自动解压 gzip/deflate）"""
+    enc = (headers.get('Content-Encoding')
+           or headers.get('content-encoding') or '').lower()
+    try:
+        if enc == 'gzip':
+            raw = gzip.decompress(raw)
+        elif enc == 'deflate':
+            raw = zlib.decompress(raw)
+    except Exception:
+        pass
+    return raw.decode('utf-8', 'replace')
+
+
 def fetch(opener, url, method='GET', data=None, headers=None, timeout=20):
-    h = {'User-Agent': 'Mozilla/5.0'}
+    h = dict(BROWSER_HEADERS)
     if headers:
         h.update(headers)
     req = urllib.request.Request(url, method=method, data=data, headers=h)
     try:
         resp = opener.open(req, timeout=timeout)
-        return resp.status, dict(resp.headers), resp.read().decode('utf-8', 'replace')
+        hdrs = dict(resp.headers)
+        return resp.status, hdrs, _decode_body(hdrs, resp.read())
     except urllib.error.HTTPError as e:
         # HTTPError 也要拿到 body 和 headers，CAS 在 302 时会被 NoRedirect 抛 HTTPError
-        return e.code, dict(e.headers), e.read().decode('utf-8', 'replace')
+        eh = dict(e.headers)
+        return e.code, eh, _decode_body(eh, e.read())
     except urllib.error.URLError as e:
         raise RuntimeError(f"URLError {e}")
 
