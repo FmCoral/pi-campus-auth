@@ -1,7 +1,18 @@
 # 树莓派校园网自动认证 + 热点 HWIFI 完全部署手册
 
-> 面向后来者的可复刻文档。记录从零搭建的完整步骤、逆向细节与所有踩过的坑。
-> 完成时间：2026-09-25 ｜ 环境：湖南农业大学校园网（锐捷 ePortal + CAS + Trusfort CIMS）
+> 面向后来者的可复刻文档：从零搭建的完整步骤、逆向细节、全部踩过的坑。
+> 环境：湖南农业大学校园网（锐捷 ePortal + CAS + Trusfort CIMS）
+> 初版：2026-09-25 ｜ 最近大改：2026-10-10
+
+### 2026-10-10 重要修订（先读）
+
+早期文档里的三条结论已被实测推翻，部署时**不要再照做**：
+
+| 旧结论（已废弃） | 事实（2026-10-10 验证） |
+|---|---|
+| SSO 固定是 `61.187.55.38`，要写进 /etc/hosts | 那是 SSO 的**旧公网地址**，写死 hosts 反而导致走错门被 MITM；已删除 |
+| 校园 DNS `10.10.10.10` 对 SSO 只返回 v6 | 实际返回**校内 v4 `10.8.9.35`**（合法证书、未认证白名单可达） |
+| 掉线需要切 coral 热点才能认证 | eth0 直达校内 SSO 即可，**无需热点、第三台设备或任何人工动作** |
 
 ---
 
@@ -15,21 +26,21 @@
 2. **板载 WiFi 广播热点 HWIFI**，手机/电脑等终端接入即可上网
 3. **掉线自动重认证**，全程零人工干预，不增加额外硬件
 4. **规避校园网"防私接/防代理"检测**
+5. 提供 **Web 监控面板** 与可选 **OLED 状态屏**，支持定时/立即安全关机
 
 ## 1.2 最终网络拓扑
 
 ```
-[校园网墙插] ──网线── [Pi eth0 / WAN]  10.101.0.16/20  gw 10.101.0.1
+[校园网墙插] ──网线── [Pi eth0 / WAN]  DHCP 动态获取（示例 10.101.0.25/20，gw 10.101.0.1）
                        │   默认路由走这里；自动认证
                        │
-                       [Pi br-lan]      192.168.1.1/24（DHCP 服务）
+                       [Pi br-lan]      192.168.1.1/24（DHCP：.100~.249）
                        ▲
                        [Pi phy0-ap0]    5GHz channel 149 VHT80
-                       SSID=HWIFI  加密=WPA2-PSK  密码=自定义
+                       SSID=HWIFI  加密=WPA2-PSK
                        ▲
         ┌──────────────┼──────────────┐
-   [vivo 手机]     [iPhone]       [电脑]        ← 终端经 NAT 上网
-   192.168.1.106   .150           .140
+   [手机]          [电脑]        [其他终端]        ← 终端经 NAT 上网
 ```
 
 **关键设计**：终端流量经 NAT（masquerade）后，校园网只看到树莓派一个 IP + 一个 MAC + 一个账号，等同于一台普通设备。
@@ -45,16 +56,23 @@
 | openssl | openssl-util 3.5.7（RSA 加密用） |
 | TLS 库 | libustream-openssl + ca-bundle |
 | WiFi 芯片 | BCM43455（板载 SDIO），固件 7.45.250（2022-07-29） |
-| 控制电脑 | Windows 10/11 + PowerShell，另装 WSL2 Ubuntu-22.04（救砖用） |
+| 控制电脑 | Windows 10/11 + PowerShell（另备 WSL2 Ubuntu-22.04 救砖用） |
+| OLED（可选） | 0.96 寸 SSD1306 128×64 I2C，地址 0x3C |
 
-### 校园网关键地址
+## 1.4 校园网关键地址（2026-10-10 实测）
 
 | 名称 | 地址 | 说明 |
 |------|------|------|
-| ePortal 服务器 | `http://10.100.0.12` | 锐捷认证网关（内网） |
-| SSO/CAS | `sso.hunau.edu.cn` = `61.187.55.38` | 学校统一认证（公网 v4） |
-| 校园 DNS | `10.10.10.10` | **对 sso 域名只返回 v6**（坑） |
-| 探测 IP | `8.8.8.8` / `223.5.5.5` | 掉线检测用 |
+| ePortal 服务器 | `http://10.100.0.12` | 锐捷认证网关（内网 HTTP） |
+| SSO 校内地址 | `10.8.9.35` | **校园 DNS 返回，未认证白名单可达，正确入口** |
+| SSO 当前公网地址 | `218.104.146.107` | 公共 DNS 返回（合法 TrustAsia 证书） |
+| SSO 旧公网地址 | `61.187.55.38` | 未认证时走它会被网关 MITM（锐捷伪证书）——**避开** |
+| SSO v6 | `2408:8653:21::a001:7` | 校园网不给 v6 前缀，用不上 |
+| 校园 DNS | `10.10.10.10` | SSO → 10.8.9.35 |
+| 备用 DNS | `114.114.114.114` | WAN DHCP 下发的第二上游 |
+| 探测目标 | `223.5.5.5` / `180.76.76.76` / `8.8.8.8` | 任一通则网络层可达 |
+
+> SSO 三个 v4 地址的证书核对：10.8.9.35 与 218.104.146.107 均为 TrustAsia OV 签发的 `*.hunau.edu.cn` 合法证书；61.187.55.38 在未认证时返回锐捷（ruijie.com.cn）伪证书。
 
 ---
 
@@ -64,10 +82,10 @@
 
 1. 到 ImmortalWrt 官网下载 **bcm27xx/bcm2711** 的 factory 镜像（`.img.gz`），解压出 `.img`
 2. 用 Rufus（选 DD 模式）或 balenaEtcher 烧入 SD 卡
-3. 插卡上电。首次启动后默认 LAN 地址 `192.168.1.1`
-   - 调试期可用网线把电脑接到树莓派，或直接接显示器+键盘（root 默认空密码）
+3. 插卡上电，首次启动后默认 LAN 地址 `192.168.1.1`（root 默认空密码）
+   - 调试期可用网线直连电脑，或接显示器 + 键盘
 
-> ⚠️ 树莓派 4B 默认 eth0 在 LAN 桥上。我们要把 eth0 改造成 WAN，见 2.2。
+> ⚠️ 树莓派 4B 默认 eth0 挂在 LAN 桥上。我们要把 eth0 改成 WAN，见 2.2。
 
 ## 2.2 网络配置 /etc/config/network
 
@@ -99,15 +117,14 @@ config interface 'wan6'
         option reqaddress 'try'
         option reqprefix 'auto'      # 校园网不给 v6，一直 pending（无害）
 
-# wwan（连手机热点）在 AP-only 终态中不再使用，保留配置但 disabled
+# wwan（连 coral 热点）当前架构不再使用；保留接口但 disabled
 config interface 'wwan'
         option proto 'dhcp'
 ```
 
-用命令行方式配置（uci）：
+uci 方式：
 
 ```sh
-# eth0 从默认 LAN 桥移出、新建 WAN（uci commit network 后生效）
 uci set network.wan=interface
 uci set network.wan.proto='dhcp'
 uci set network.wan.device='eth0'
@@ -116,7 +133,7 @@ uci commit network
 
 ## 2.3 防火墙 /etc/config/firewall
 
-关键三个部分（其余默认规则保留）：
+关键部分（其余默认规则保留）：
 
 ```sh
 config defaults
@@ -136,7 +153,7 @@ config zone
         option name 'wan'
         list network 'wan'
         list network 'wan6'
-        option input 'REJECT'            # 注意：eth0 上 SSH 会被拦
+        option input 'REJECT'            # eth0 上 SSH / 8080 都被拦
         option forward 'DROP'
         option masq '1'                  # ★ NAT：终端用树莓派 IP 出去
         option mtu_fix '1'
@@ -146,20 +163,22 @@ config forwarding
         option dest 'wan'                # ★ 允许终端转发到校园网
 ```
 
+> SSH 和监控面板因此**只能从 HWIFI（LAN）访问**，这是有意的安全边界。
+
 ## 2.4 DHCP 服务（给热点终端分配 IP）
 
-`/etc/config/dhcp` 中 lan 段默认已存在，确认如下：
+`/etc/config/dhcp` 的 lan 段确认如下：
 
 ```sh
 config dhcp 'lan'
         option interface 'lan'
         option start '100'               # 192.168.1.100 起
-        option limit '150'               # 到 192.168.1.249
+        option limit '150'               # 到 .249
         option leasetime '12h'
         option dhcpv4 'server'
 ```
 
-无需改动，dnsmasq 默认随系统启动。
+dnsmasq 默认随系统启动，无需额外操作。
 
 ---
 
@@ -171,17 +190,14 @@ config dhcp 'lan'
 锐捷 ePortal（网关）  →  CAS OAuth2.0（发授权码）  →  Trusfort CIMS（二次身份认证）
 ```
 
-**关键认知**：普通的"账号密码 POST"拿不到登录态——CAS 登录页嵌了一个 CIMS iframe，密码要在 iframe 里经 RSA 加密、走 CIMS 独立 API 换成一个 `usersign`，再由父页面把 `usersign` 回填表单 POST 给 CAS。这就是为什么简单脚本登录会失败。
+**关键认知**：普通"账号密码 POST"拿不到登录态——CAS 登录页嵌了一个 CIMS iframe，密码要在 iframe 里经 RSA 加密、走 CIMS 独立 API 换成 `usersign`，再由父页面回填表单 POST 给 CAS。这就是简单脚本登录失败的原因。
 
-### 逆向方法论（如何自己分析）
+### 逆向方法论
 
-1. 电脑接一个**能正常访问外网**的网络（手机热点），浏览器开 F12 → Network，勾选 Preserve log
-2. 在未认证的网口上访问任意 `http://` 网站，观察完整跳转链
-3. 右键保存登录页 HTML（本文环境里存成 `post.html`）
-4. 从登录页里找到并下载三个关键 JS：
-   - `CIMS.js`（父窗口控制逻辑）
-   - `cims_web.js`（iframe 内 API 调用，即 CIMS-Web-Server-v3.js）
-   - `cims_encryptor.js`（加密器选择）
+1. 电脑接一个能正常上网的网络，浏览器 F12 → Network，勾选 Preserve log
+2. 在未认证网口访问任意 `http://` 站点，观察完整跳转链
+3. 右键保存登录页 HTML（本项目存在 reference/post.html）
+4. 从页面下载关键 JS：`CIMS.js`（父窗口逻辑）、`cims_web.js`（iframe API）、`cims_encryptor.js`（加密选择）
 5. 在 JS 里搜字段名、API 路径、encrypt 调用，逐步还原
 
 ---
@@ -192,22 +208,20 @@ config dhcp 'lan'
 校园网关劫持 HTTP → eportal redirect
         │
  Step 1  GET http://1.1.1.1/
-         返回一段 JS，正则提取：
+         网关返回 200 + 一段 JS（不是 302！），正则提取：
          http://10.100.0.12/eportal/index.jsp?wlanuserip=<加密串>&...
-         （wlanuserip 等是树莓派 IP/MAC 的加密参数，每次必须重新拿）
+         wlanuserip 等是本机 IP/MAC 的加密参数，每次掉线必须重新拿
         │ 走 eth0
  Step 2  GET eportal index.jsp
          → 302 到 sso /oauth2.0/authorize（redirect_uri 含 wlanuserip）
-        │ 走 sso 路由
+        │
  Step 3  GET sso authorize
          → 302 到 /cas/login?service=https://sso.../callbackAuthorize?...
         │
- Step 4  GET cas/login → 200 登录页，提取：
+ Step 4  GET cas/login → 200 登录页（可能是 gzip 压缩，见 2.12 与 3.3），提取：
          • sig_request  格式  XD|<b64>|<hex>:APP|<b64>|<hex>
-                        以 ':' 分成两半：
-                        cims_sig = 左半（XD| 前缀）
-                        app_sig  = 右半（APP| 前缀）
-         • postArgument CIMS.init 里配置的 POST 字段名（★见 2.7）
+                        以 ':' 分两半：cims_sig（左，XD| 前缀）/ app_sig（右，APP|）
+         • postArgument CIMS.init 配置的 POST 字段名（★见 2.7）
          • hidden 表单  execution, _eventId, username(蜜罐=aaaaaaa), geolocation
          • service      从 URL query 取（= callbackAuthorize URL）
         │
@@ -222,10 +236,9 @@ config dhcp 'lan'
          encryptor=INTERNATIONAL 表示用 RSA（非国密 SM2）
         │ 本地
  Step 7  RSA 加密
-         publicKey 是 X.509 SubjectPublicKeyInfo 的 base64 body
-         拼成 PEM（加 -----BEGIN/END PUBLIC KEY-----，每行 64 字符）
+         publicKey 是 X.509 SubjectPublicKeyInfo 的 base64 body，拼 PEM（每行 64 字符）
          ★ 明文 = password + "|" + token（不是密码本身！）
-         padding = PKCS1v1.5（JSEncrypt 标准）
+         padding = PKCS1v1.5
          openssl pkeyutl -encrypt -pubin -inkey key.pem \
                  -pkeyopt rsa_padding_mode:pkcs1  → base64 = authcode
         │
@@ -242,49 +255,43 @@ config dhcp 'lan'
  Step 10 跟随跳转链 callbackAuthorize → authorize
          → 302 到 redirect_uri?code=OC-xxxxx，记下该 URL
         │ 走 eth0
- Step 11 GET eportal callback（上一步带 code 的 URL）
-         eportal 标记该 IP 已认证 → eth0 可上网，ping 8.8.8.8 通
+ Step 11 GET eportal callback（带 code 的 URL）
+         eportal 标记该 IP 已认证 → eth0 可上网
 ```
 
-## 2.7 最致命的坑：POST 字段名（Step 9 的 401）
+## 2.7 最致命的坑之一：POST 字段名（Step 9 的 401）
 
-CIMS.js 的 `go()` 函数里，回填字段的名字**不是写死的**：
+CIMS.js 的 `go()` 里回填字段名**不是写死的**：
 
 ```js
-input.name = options.postArgument;     // 字段名取自 CIMS.init 配置
+input.name = options.postArgument;     // 取自 CIMS.init 配置
 input.value = response + ':' + appSig;
 ```
 
-CIMS.js 默认值是 `sig_response`，**但本系统在登录页显式覆盖了**：
+默认值是 `sig_response`，**但本系统登录页显式覆盖**为 `signedCimsResponse`。用默认名提交 → 字段缺失 → **401 Invalid credentials**。
 
-```js
-CIMS.init({ ..., postArgument: 'signedCimsResponse', ... });
-```
-
-CAS 服务端只认 `signedCimsResponse`。用 `sig_response` 提交 → 字段缺失 → **401 Invalid credentials**。
-
-**正确做法——动态解析，不要硬编码：**
+正确做法是动态解析、不要硬编码：
 
 ```python
 mpa = re.search(r'postArgument\s*:\s*[\'"]([^\'"]+)[\'"]', cas_body)
-post_argument = mpa.group(1) if mpa else 'sig_response'   # 兜底默认值
+post_argument = mpa.group(1) if mpa else 'sig_response'
 postdata = {post_argument: sig_response}
 ```
 
-> 排查 401 时曾怀疑 cookie / Referer / IP / URL 编码，全被证伪。
+> 排查时曾怀疑 cookie / Referer / IP / URL 编码，全部证伪。
 > 教训：**先核对前端 JS 的字段名，再怀疑网络层。**
 
 ## 2.8 前端 JS 逆向要点
 
 | 文件 | 关键内容 |
 |------|---------|
-| CIMS.js | `parseSigRequest` 拆 sig；`onReceivedMessage` 收 iframe 消息；`go()` 回填并 submit；postArgument 默认值 line 97-99 |
-| cims_web.js | `n()` = othertype 请求；`E()` = checkAuthcode，内部 `ao.encrypt(publicKey, password+"|"+token)`；成功后 `o()/d()` 用 postMessage 发 `GO|usersign` |
+| CIMS.js | `parseSigRequest` 拆 sig；`onReceivedMessage` 收 iframe 消息；`go()` 回填 submit；postArgument 默认值 |
+| cims_web.js | othertype 请求；checkAuthcode，内部 `encrypt(publicKey, password+"|"+token)`；成功后 postMessage 发 `GO|usersign` |
 | cims_encryptor.js | encryptor=INTERNATIONAL → JSEncrypt（RSA PKCS1v1.5） |
 
-postMessage 格式：`GO|AUTH|<base64>|<hex>`，父窗口去掉 `GO|` 后得到 usersign。
+postMessage 格式：`GO|AUTH|<base64>|<hex>`，父窗口去掉 `GO|` 得到 usersign。
 
-## 2.9 RSA 加密实现要点
+## 2.9 RSA 加密实现
 
 树莓派没有 Python 加密库，直接调系统 openssl：
 
@@ -296,84 +303,88 @@ def rsa_encrypt(public_key_b64, plaintext):
     # 写临时文件 → openssl pkeyutl -encrypt -pkcs1 → base64
 ```
 
-完整实现见 `auto_auth.py` 的 `rsa_encrypt()`。
+完整实现见 [auto_auth.py](../src/auto_auth.py) 的 `rsa_encrypt()`。
 
 ## 2.10 关于 TGC 长效 Cookie（故意不复用）
 
-Step 9 成功后 CAS 会发 `TGC=TGT-xxxx`。浏览器检测到 TGC 会跳过 CIMS 直接 SSO。
-
-但脚本**故意每次新建 CookieJar、不复用 TGC**，因为：
-
-- TGC 有服务端时效，失效后仍要走完整 CIMS
-- 依赖它会产生"什么时候需要重新登录"的不确定性，违背零人工干预目标
-- 每次跑完整 11 步链最稳健、可预测
+Step 9 成功后 CAS 会发 `TGC=TGT-xxxx`，浏览器靠它跳过 CIMS。脚本**故意每次新建 CookieJar**：TGC 有服务端时效，依赖它会引入"何时需要重新登录"的不确定性；每次走完整链路最可预测。
 
 ---
 
 ## 2.11 部署生产脚本 auto_auth.py
 
-把 [auto_auth.py](../src/auto_auth.py) 上传到树莓派 `/root/auto_auth.py`，结构：
+上传 [auto_auth.py](../src/auto_auth.py) 到 `/root/auto_auth.py`：
 
 | 函数 | 职责 |
 |------|------|
 | `load_credentials()` | 从 auto_auth.conf / 环境变量读取账号 |
-| `is_online()` | ping 公网 IP，返回是否在线 |
+| `is_online()` | ping 多目标 + wget 百度检测 HTTP 劫持 |
+| `_decode_body()` | 按 Content-Encoding 解压 gzip/deflate |
 | `rsa_encrypt()` | 调 openssl 做 RSA |
 | `authenticate()` | 完整 11 步，返回 (bool, msg) |
-| `main()` | 在线则静默退出；掉线则 authenticate，失败 exit(1) |
+| `main()` | 在线静默退出；掉线则 authenticate，失败 exit(1) |
 
-部署命令（注意行尾和权限，坑见第三部分）：
-
-```sh
-# 上传后必须做三件事：
-tr -d '\r' < /root/auto_auth.py > /tmp/c.py && mv /tmp/c.py /root/auto_auth.py  # 去CRLF
-chmod +x /root/auto_auth.py                                                     # 加执行权限
-cp /root/auto_auth.conf.example /root/auto_auth.conf                            # 建账号配置
-vi /root/auto_auth.conf                                                          # 填入真实学号密码
-```
-
-账号密码不再写死在脚本里，由 `/root/auto_auth.conf` 提供（该文件不入库，勿提交），也可用环境变量 `CAMPUS_USERNAME` / `CAMPUS_PASSWORD` 覆盖。
-
-## 2.12 路由持久化（hotplug）
-
-`/etc/hotplug.d/iface/99-routes`，接口 ifup 时自动设路由：
+部署三件事（行尾/权限坑见第三部分）：
 
 ```sh
-#!/bin/sh
-[ "$ACTION" = ifup ] || exit 0
-case "$INTERFACE" in
-    wan)  sleep 1; ip route replace default via 10.101.0.1 dev eth0 metric 0 ;;
-    wwan) sleep 1; ip route replace 61.187.55.38/32 via 172.20.10.1 dev phy0-sta0 ;;
-esac
+tr -d '\r' < /root/auto_auth.py > /tmp/c.py && mv /tmp/c.py /root/auto_auth.py  # 去 CRLF
+chmod +x /root/auto_auth.py
+cp /root/auto_auth.conf.example /root/auto_auth.conf
+vi /root/auto_auth.conf        # 真实学号密码；该文件不入库
 ```
 
-> AP-only 终态里 wwan 不触发，wan 分支负责保证默认路由。
+也支持环境变量 `CAMPUS_USERNAME` / `CAMPUS_PASSWORD`（优先级高于 conf）。
 
-另外必须加 hosts（否则校园 DNS 只给 v6，解析不了 sso）：
+## 2.12 ★ DNS 正确配置（2026-10-10 后的正确做法）
+
+目标：让 SSO 域名解析到**校内 10.8.9.35**，而不是任何公网地址。需要三件事：
+
+**① 删除 /etc/hosts 里的历史死绑定（如果存在）：**
 
 ```sh
-echo '61.187.55.38 sso.hunau.edu.cn' >> /etc/hosts
+cp /etc/hosts /etc/hosts.bak-mix
+sed -i '/sso.hunau.edu.cn/d' /etc/hosts
 ```
+
+**② 放行 rebind 保护：** dnsmasq 默认 `rebind_protection=1`，会把"域名解析出 RFC1918 内网地址"当成 DNS 投毒丢弃。10.8.9.35 虽是公网段地址不触发它，但保持白名单更稳：
+
+```sh
+uci add_list dhcp.@dnsmasq[0].rebind_domain='hunau.edu.cn'
+uci commit dhcp
+```
+
+**③ 在 /etc/dnsmasq.conf 强制该域名走校园 DNS（可靠落点）：**
+
+```sh
+echo "server=/hunau.edu.cn/10.10.10.10" >> /etc/dnsmasq.conf
+/etc/init.d/dnsmasq restart
+```
+
+验证：
+
+```sh
+nslookup sso.hunau.edu.cn 127.0.0.1   # 必须看到 Address: 10.8.9.35
+```
+
+> 为什么用 /etc/dnsmasq.conf 而不是 uci？当时实测 `uci add_list ... server='...'` / `address='...'` 的条目**没有落入**生成的 `/var/etc/dnsmasq.conf.cfg01411c`（该版本 dnsmasq 经 ujail 启动，配置生成行为特殊）。/etc/dnsmasq.conf 是主配置里 `conf-file=` 直接引用的，必定生效。排查这类问题的方法：直接看生成文件内容，别只信 uci。
 
 ## 2.13 cron 部署（每分钟检测）
 
-创建 `/etc/crontabs/root`：
+`/etc/crontabs/root`（即仓库 [crontab-root](../src/crontab-root)）：
 
 ```cron
 * * * * * /root/auto_auth.py >> /root/auto_auth.log 2>&1
 30 4 * * * [ $(stat -c%s /root/auto_auth.log 2>/dev/null || echo 0) -gt 200000 ] && echo > /root/auto_auth.log
 ```
 
-第二条是日志超 200KB 自动清空（日志要放 /root 持久化，不能放 tmpfs，见 3.3）。
-
-然后启动：
+第二条：日志超 200KB 自动清空。日志放 `/root`（持久层），不能放 tmpfs。
 
 ```sh
-/etc/init.d/cron start      # 前提：crontabs 目录非空，见 3.4
-/etc/init.d/cron enable     # 开机自启
+/etc/init.d/cron enable
+/etc/init.d/cron start      # 前提：crontabs 目录非空（见 3.5）
 ```
 
----
+> crond 还有「错过补跑」机制，对关机类任务是陷阱——见 2.19 与 3.9。
 
 ## 2.14 部署热点 HWIFI
 
@@ -384,7 +395,7 @@ config wifi-device 'radio0'
         option type 'mac80211'
         option path 'platform/soc/fe300000.mmcnr/mmc_host/mmc1/mmc1:0001/mmc1:0001:1'
         option band '5g'
-        option channel '149'          # ★ 固定信道（sta 曾用的信道）
+        option channel '149'
         option htmode 'VHT80'
         option country 'CN'
 
@@ -394,7 +405,7 @@ config wifi-iface 'default_radio0'
         option mode 'ap'
         option ssid 'HWIFI'
         option encryption 'psk2'
-        option key '你的热点密码'
+        option key '热点密码'
         option disabled '0'           # 启用 AP
 
 config wifi-iface 'wwan'
@@ -403,42 +414,37 @@ config wifi-iface 'wwan'
         option mode 'sta'
         option ssid 'coral'
         option encryption 'psk2'
-        option key '上级热点密码'
-        option disabled '1'           # ★ 关掉 sta（见 2.15）
+        option key '22222222'
+        option disabled '1'           # ★ sta 永久关闭（见 2.15）
 ```
 
-启用后 AP 自动加入 br-lan，终端即可连接。
+AP 启用后自动加入 br-lan，终端可连接。
 
-## 2.15 ★ sta + AP 并发必须放弃（重要）
+## 2.15 ★ sta + AP 并发必须放弃
 
-BCM43455 单 radio 的 sta 和 AP **单独使用都稳定，共存必崩**。虽然 `iw phy` 报告声称支持 `managed<=1, AP<=1`，但固件实际有问题。穷尽测试：
+BCM43455 单 radio 的 sta 和 AP **单独用都稳定，共存必崩**。尽管 `iw phy` 声称支持 `managed<=1, AP<=1`，固件实际有缺陷：
 
-| 尝试方式 | 结果 |
+| 尝试 | 结果 |
 |---------|------|
-| `wifi reload`（sta+AP 同时起） | radio 崩，sta 不重连，SSH 断 |
+| `wifi reload`（sta+AP 同起） | radio 崩、sta 不重连、SSH 断 |
 | `wifi reconf`（sta 在线热加 AP） | 整个 radio 挂 |
 | `wifi reconf`（AP 在线热加 sta） | AP+sta 全挂 |
 
-dmesg 无 `firmware crashed`（接口能创建），但共存时互相干扰、sta 连上即被踢、hostapd 反复重启。
+dmesg 无 `firmware crashed`（接口能创建），但共存时 sta 连上即被踢、hostapd 反复重启。**结论：AP-only；确需 sta 就加 USB WiFi 棒（独立 phy）。**
 
-**结论：AP-only，sta 永久 disabled。** 若其他学校环境确需 sta，加一个 USB WiFi 棒（独立 phy）是唯一稳定解。
+## 2.16 TTL 伪装防检测
 
-## 2.16 TTL 伪装防检测（防私接）
-
-**原理**：终端发出的包 TTL=64，经树莓派 FORWARD 后变 63 再 SNAT 出去——网关一眼识别为"经过路由转发"，这是锐捷防私接最常用的检测。
-
-**措施**：POSTROUTING 钩子把出站 TTL 强制改成 64。
-
-先确认内核支持（在未挂钩的测试表试，无副作用）：
+**原理**：终端包 TTL=64，经 FORWARD 变 63 再 SNAT 出去——网关据此识别"经过路由"。措施：POSTROUTING 钩子把出站 TTL 强制 64。
 
 ```sh
+# 内核支持性测试
 nft add table ip ttlprobe
 nft add chain ip ttlprobe c
-nft add rule ip ttlprobe c ip ttl set 64     # 不报错即支持
+nft add rule ip ttlprobe c ip ttl set 64
 nft delete table ip ttlprobe
 ```
 
-创建 `/etc/firewall.ttl.sh`（幂等）：
+`/etc/firewall.ttl.sh`（仓库 [firewall.ttl.sh](../src/firewall.ttl.sh)，幂等）：
 
 ```sh
 #!/bin/sh
@@ -449,7 +455,7 @@ nft flush chain ip ttlfix postrouting
 nft add rule ip ttlfix postrouting oifname eth0 ip ttl set 64
 ```
 
-注册成 firewall include（实现持久化）：
+注册为 firewall include 实现持久化：
 
 ```sh
 uci add firewall include
@@ -457,165 +463,282 @@ uci set firewall.@include[-1].type='script'
 uci set firewall.@include[-1].path='/etc/firewall.ttl.sh'
 uci set firewall.@include[-1].reload='1'
 uci commit firewall
-sh /etc/firewall.ttl.sh          # 立即生效，不断网
+sh /etc/firewall.ttl.sh
 ```
 
-> 注：本内核不支持 `route` 类型链，必须用 `filter` 类型挂 postrouting（见 3.5）。
+> 本内核不支持 `route` 类型链，必须用 `filter` 挂 postrouting（见 3.6）。
 
-### TTL 效果验证方法
+**验证**：用原始 socket 发 TTL=1 的 ICMP——无规则时包死在第一跳；有规则时出口改 64、收到 echo reply。脚本见 [verify_ttl.py](../src/verify_ttl.py)。
 
-用原始 socket 发一个 **TTL=1** 的 ICMP：
+## 2.17 OLED 状态屏 + 按设备流量统计
 
-- 无规则：包死在第一跳，无回应
-- 有规则：出口被改成 64，收到目标 echo reply ← 证明伪装生效
+### 接线（务必照此，看错排会拉死总线）
 
-验证脚本见 [verify_ttl.py](../src/verify_ttl.py)。
-
-## 2.17 OLED 状态屏 + 按设备流量统计（可选扩展）
-
-### 硬件与接线
-
-0.96 寸 SSD1306 12864 I2C OLED（地址 0x3C），接树莓派排针：
-
-| OLED | 树莓派物理引脚 | 说明 |
-|------|--------------|------|
+| OLED | 物理引脚 | 说明 |
+|------|---------|------|
 | VCC | 引脚 1 | 3.3V |
 | GND | 引脚 9 | GND |
 | SDA | 引脚 3 | GPIO2（硬件 I2C） |
 | SCL | 引脚 5 | GPIO3 |
 
-启用硬件 I2C（/boot/config.txt 加 `dtparam=i2c_arm=on`，ImmortalWrt 在 `/etc/config/system` 或 boot 分区配置），装 `python3` 即可，驱动纯标准库（fcntl + os.write /dev/i2c-1），无需 smbus。
+启用硬件 I2C，驱动纯标准库（fcntl + os.write /dev/i2c-1），无需 smbus。总线卡死时给 9 个 SCL 脉冲解锁。
 
-> 注意：普通 12864 模块需 9 个 SCL 脉冲解锁被卡死的 I2C 总线；接线务必核对引脚号（插 1/3/5/9 排曾因看错排导致全线拉低假 ACK）。
+### 屏幕页面（约 0.5s 刷新）
 
-### 屏幕显示（三页轮换，每页 1 秒，0.5 秒刷新率）
+- 页1 网络：连接数、实时上/下行速率、整机累计流量
+- 页2 系统：校园网连通、CPU 温度、内存、CPU 占用
+- 页3 设备：每台设备名 + 累计流量
 
-- 页1 网络：`L:` 接入终端数、`U:/D:` 实时上传/下载速度（0.5s 采样）、累计流量
-- 页2 系统：`NET:` 校园网连通 T/F（ping 223.5.5.5）、CPU 温度、内存、CPU 占用
-- 页3 设备：每台接入设备的 hostname + 累计流量（下载+上传）
+中文渲染靠内置 12×12 CJK 字模（仅覆盖用到的字），补字用 [gen_cjk_font.py](../tools/gen_cjk_font.py)。
 
-### 按设备流量记账原理（nlbwmon 方案被否决）
+### 按设备记账（nftables 命名计数器；nlbwmon 方案已否决）
 
-先装了 nlbwmon，实测**与 flow offloading 不兼容**：开启软/硬分载后 conntrack 计数恒为 0，nlbwmon 永远空表；关闭 offload 后其 netlink 通道在该内核（6.12）仍不产数据，放弃。
+nlbwmon 与 flow offloading 不兼容：开分载后 conntrack 字节恒 0、永远空表；关分载后其 netlink 通道在 6.12 内核仍不产数据。最终方案：
 
-最终方案 **nftables 命名计数器**，全自动对账：
-
-1. OLED 守护进程每 5 秒读 `/tmp/dhcp.leases`，为每个租约 IP 在独立表 `inet hwacct` 建 `up_<IP十六进制>` / `down_<IP十六进制>` 计数器 + forward 钩子规则；租约消失则删除
-2. 读计数器差值，按 **MAC** 累计（设备换 IP 不丢账），写 `/root/traffic_state.json`（含计数器基准值，重启不重复计数）
-3. 每 10 分钟追加一行设备快照到 `/root/traffic_log/YYYY-MM-DD.txt`（按天分文件）
+1. 守护进程每 5s 读 `/tmp/dhcp.leases`，为每个租约 IP 在表 `inet hwacct` 建 `up_<IP十六进制>` / `down_<IP十六进制>` 计数器 + forward 规则；租约消失即删
+2. 读计数器差值，按 **MAC** 累计（换 IP 不丢账），写 `/root/traffic_state.json`（内含计数器基准，重启不重复计）
+3. 每 10 分钟追加快照到 `/root/traffic_log/YYYY-MM-DD.txt`
 
 ```sh
-# 部署（脚本见 src/oled_status.py）
-scp src/oled_status.py root@192.168.1.1:/tmp/
-ssh root@192.168.1.1 "tr -d '\r' < /tmp/oled_status.py > /root/oled_status.py; chmod +x /root/oled_status.py"
-# procd 服务（开机自启 + 崩溃 respawn），/etc/init.d/oled：
+# procd 服务 /etc/init.d/oled：
 #   procd_set_param command /usr/bin/python3 /root/oled_status.py
 #   procd_set_param respawn 3600 5 5
 /etc/init.d/oled enable && /etc/init.d/oled start
 ```
 
-**代价**：按设备计数要求流量走软件转发，必须保持 `flow_offloading=0`（见 2.16 前提）。树莓派 4B 软转发对 3~5 个终端的日常流量完全够用；若追求千兆线速可删除 OLED 的对账逻辑后重新打开 offload。
+**代价**：必须保持 `flow_offloading=0`（流量走软件转发）。3~5 终端日常流量对 4B 无压力；要千兆线速可删对账逻辑后重开 offload。nft 计数器断电清零，重启后代码检测到负差会重置基线并跳过该轮，确保累计不丢。
 
-### 查看设备流量
+## 2.18 Web 监控面板部署
+
+文件：[monitor_web.py](../src/monitor_web.py) + [monitor.html](../src/monitor.html)，部署到 `/root/`。单文件 HTTP 服务，端口 **8080**，仅 LAN。
 
 ```sh
-cat /root/traffic_state.json                       # 实时累计（按 MAC）
-cat /root/traffic_log/2026-09-26.txt               # 当天历史快照
-nft list counters                                  # 原始计数器
+# procd 服务 /etc/init.d/monitorweb：
+#   procd_set_param command /usr/bin/python3 /root/monitor_web.py
+#   procd_set_param respawn 3600 5 5
+/etc/init.d/monitorweb enable && /etc/init.d/monitorweb start
 ```
 
-> 应用级归属（"抖音用了多少"）受 HTTPS 加密限制只能按域名/SNI 近似推断，本项目不做。
+接口一览：
+
+| 路径 | 内容 |
+|------|------|
+| `/api/status` | 总览 / 设备 / 系统实时数据 |
+| `/api/system` | 分核 CPU、内存明细、存储、接口、进程、温度曲线 |
+| `/api/hist?h=24\|72` | 分钟级流量历史（3 天环形） |
+| `/api/history?days=30` | 按天流量（traffic_log 差值） |
+| `/api/log?lines=200` | 认证日志尾部 |
+| `/api/device_dest` | 设备流量去向 |
+| `/api/auth_run` | 立即触发一次认证 |
+| `/api/shutdown` | 定时/立即关机（立即需密钥 623） |
+
+前端为单文件 HTML，后端每次请求现读，改完浏览器即生效。面板全部速率数字 1 秒采样 + 5 秒滑动窗口平均；速率类图表对数坐标。
+
+### 终端设备页要点
+
+- KPI 四卡：设备总数（在线/离线）、当前在线（在线率）、24h 活跃、最久在线
+- 状态副行：在线「已连接 X小时X分」；离线「最后在线 X小时前 · 今天HH:MM」（跨天显日期）
+- 累计在线时长列（替换协商速率列），所有列支持表头排序
+- 设备行点击展开**流量去向**：环形图（中心总流量）+ 服务列表（最多 7 个，其余并入其他），今日 / 近 7 天切换，展开状态在每秒刷新下保持
+- 数据：`/root/device_seen.json`（`{mac:{s:最后在线,t:累计秒}}`，在线每 5s 累加、60s 落盘，离线立即固化）；`/root/traffic_dest.json`（30 天）
+- 流量去向通过原始套接字 + BPF 过滤器嗅探 DNS（仅 53 端口，不改 dnsmasq），conntrack 每 10s 做连接字节增量，按「IP→域名→服务商」归属；已排除路由器自身 cloudflared 流量
+- 两类数据均从功能上线（2026-10 上旬）起算，不可追溯历史
+
+### 温度趋势
+
+- 标题栏「1 小时 / 24 小时 / 3 天」分段：24h 跨天日期 + 每 4 小时整点；3d 每日日期 + 每 6 小时整点
+- Y 轴按数据自适应（不固定上限）；65℃ 告警虚线；档位在刷新/切页后保持
+- 1h 点为内存环形（每秒 3600 点，重启清零）；半小时平均点存 `/root/temp30_hist.json`（3 天 144 点，桶闭合即落盘，另有 120s 兜底与关机保存）
+
+## 2.19 电源管理部署与锁文件（重要）
+
+### 功能
+
+- **定时关机**：面板系统页电源卡片控制，默认每日 **23:20**，可开关。实现方式是向 crontab 增删带标记 `hwipi-sched-shutdown` 的行：
+  ```cron
+  20 23 * * * python3 /root/do_shutdown.py # hwipi-sched-shutdown
+  ```
+- **立即关机**：面板输入密钥 **623** + 二次确认；空输入/错密钥拒绝
+- **关机善后**（[do_shutdown.py](../src/do_shutdown.py)）：
+  1. 停 OLED 服务（SIGTERM 触发整机/设备/温度等末次落盘）
+  2. 接管屏幕显示「已关机」（看到即可安全拔电源）
+  3. 两次 `sync` 后 `poweroff`
+- 关机过程记录在 `/root/shutdown.log`
+
+### ★ 必须知道的坑：cron「错过补跑」连环关机
+
+2026-10-08 实测：23:20（当时设定为 13:40）关机成功后，重新上电会被**再次关机**，重插三次关了三次。原因：busybox crond 在关机时没来得及把任务标记为完成，下次开机发现"任务时间点已过"就**补跑**。
+
+**防护：给 do_shutdown.py 加锁文件**（建议实施；当前仓库源码尚未包含）：
+
+```python
+LOCK = '/tmp/shutdown.lock'
+# main() 开头：
+if os.path.exists(LOCK):
+    age = time.time() - os.path.getmtime(LOCK)
+    if age < 600:                 # 10 分钟内重复执行直接跳过
+        log('lock active (%.0fs), skip' % age)
+        return
+open(LOCK, 'w').write(str(time.time()))
+```
+
+锁放 tmpfs（/tmp）即可——重启后若时间已远离关机点，补跑也不会触发（可再叠加"仅在关机点 ±5 分钟内才执行"的时间窗判断，双保险）。
+
+**已经中招的解救**：上电后立刻进系统（时间窗很短可先删 crontab 关机行）：
+
+```sh
+sed -i '/hwipi-sched-shutdown/d' /etc/crontabs/root
+/etc/init.d/cron restart
+```
+
+### 定时开机
+
+树莓派 4B 无 RTC / ACPI，**纯软件无法定时开机**。可行方案：DS3231 等 RTC 模块接 GPIO3 排针（支持闹钟唤醒），或智能插座定时上电。
+
+## 2.20 Cloudflare Tunnel 公网访问（可选）
+
+- cloudflared 必须走 **http2 over TCP 7844**（Cloudflare 隧道协议只在 7844 监听；443 是普通网站 HTTPS，不接受隧道协议，改走 443 会 TLS 报错）
+- Public Hostname：`wifi.fmcoral.com` → `localhost:8080`
+- **必须启用 Cloudflare Access 邮箱验证**，否则面板暴露公网
+- 早期方案里的 cloudflared 自身隧道流量已在流量去向统计中排除
 
 ---
 
 # 第三部分：踩坑大全
 
-## 3.1 Windows / PowerShell 类
+> 按类别汇总，每条含现象/原因/解法。
 
-### 坑 1：CRLF 行尾导致脚本无法执行
+## 3.1 Windows / PowerShell / SSH
+
+### 坑 1：CRLF 导致脚本无法执行
 - 现象：`env: can't execute 'python3\r': No such file or directory`
-- 原因：Windows 创建的文件是 CRLF，shebang `#!/usr/bin/env python3\r` 末尾 `\r` 被当成程序名
-- 修复：`tr -d '\r' < f.py > c.py && mv c.py f.py`
+- 解法：`tr -d '\r' < f.py > c.py && mv c.py f.py`
 
-### 坑 2：ash 双引号会把 `\r` 转义成字母 r ★连环坑
-- 若写成 `tr -d "\r"`，ash 把 `\r` 解释成普通字符 `r`，于是**删掉文件里所有字母 r**
-- 本文档曾把 shebang 删成 `#!/us/bin/env`，整个脚本报废
-- **正确：单引号 `tr -d '\r'`**
+### 坑 2：`tr -d "\r"` 会删掉所有字母 r ★连环坑
+- ash 双引号把 `\r` 当普通字符 r，曾把 shebang 删成 `#!/us/bin/env`
+- **解法：必须单引号 `tr -d '\r'`**
 
-### 坑 3：PowerShell 不支持 `&&`
-- 用 `;` 分隔多条命令；需要判断成功再执行时写成 `if ($?) {...}`
+### 坑 3：PowerShell 不支持 `&&` / heredoc
+- 用 `;` 分隔；条件执行用 `if ($?) {...}`；多行 commit 信息用多个 `-m`
 
-### 坑 4：`$?` 在双引号里被 PowerShell 提前解析
-- 远程命令里要取 Linux 的 `$?`，外层 SSH 参数用单引号包裹
-- PowerShell 还保留 `<`、`>`、`(`、`)` 等字符，含这些的远程命令尽量让远端 shell 自己解析
+### 坑 4：`$?`、`<`、`()` 被 PowerShell 提前解析
+- 远程命令外层用单引号，或让远端 shell 自己解析；`@{u}` 这类写法要加引号
 
-### 坑 5：scp 必须用 `-O`，且多文件/多目标写法易错
-- 树莓派无 sftp-server：`scp -O ...`
-- 一次传多个文件到同一目标可以，但"多源多目标"不支持，分开传最稳
+### 坑 5：scp 必须 `-O`
+- 树莓派 dropbear 无 sftp-server；多目标分开传
 
-### 坑 6：SD 卡在 Windows 看不到配置文件
-- SD 卡有两个分区：FAT32 boot（Windows 可见）+ Linux ext4（资源管理器不显示）
-- 用 WSL2 挂载（需**管理员** PowerShell）：
+### 坑 6：SD 卡在 Windows 看不到配置
+- 两个分区：FAT32 boot 可见，ext4 不可见。管理员 PowerShell：
   ```powershell
   wsl --mount "\\.\PHYSICALDRIVE1" --partition 2
-  wsl -d Ubuntu-22.04            # 进去 mount /dev/sdX2 后改文件
+  # WSL 内挂载改文件
   wsl --unmount "\\.\PHYSICALDRIVE1"
   ```
 
-## 3.2 认证逆向类
+### 坑 7：SSH 报「BindInterface not supported on this platform」
+- 多网卡 + `~/.ssh/config` 编码异常（UTF-16/BOM 被误解析成绑定指令）
+- 解法：把 config 重写为纯 ASCII；用 `ssh -F NUL ...` 做对照验证
+- 私钥有 passphrase 且无 agent 时，用 Python paramiko 密码登录更省事
+
+## 3.2 认证逆向
+
+| 坑 | 说明 / 解法 |
+|----|------|
+| Step9 401 | 字段名是动态的 `signedCimsResponse`，解析 postArgument |
+| 加密明文 | `password\|token` 而非密码；padding PKCS1v1.5 |
+| sig_request 拆分 | 以 `:` 分，前缀 XD\| / APP\| |
+| iframe 会话 | Step5 不先访问，后续 API 无会话 |
+| 蜜罐字段 | hidden username=aaaaaaa 原样回传，真账号在 API |
+| 网关劫持形式 | **200 + body 内 JS 跳转**，不是 302；正则要从 body 提 eportal URL |
+| eportal 强制 SSO | 无论怎么伪装请求头，eportal 都 302 到 SSO，"本地登录页绕过"不可行 |
+| already online | 掉线误判时 eportal 返回已在线，脚本正确退出，不算失败 |
+| 参数时效 | wlanuserip 绑定当前 IP/MAC，IP 一变必须重新触发 Step1 |
+| 系统时间错误 | 无 RTC 时时间停留旧值；**实测不影响认证**，上线后 sysntpd 自动校准（曾偏差近 24h） |
+
+## 3.3 DNS（2026-10-10 新增大类）
+
+| 坑 | 说明 / 解法 |
+|----|------|
+| **/etc/hosts 死绑定** | 早期方案写死 `61.187.55.38 sso...`，dnsmasq 优先读 hosts、权重高于一切转发规则 → 必走 MITM 门。删除即可（备份 hosts.bak-mix） |
+| **分裂 DNS** | 校园 DNS 给校内 10.8.9.35，公共 DNS 给公网 218.104.146.107，旧公网 61.187.55.38 只会来自 hosts。用谁的 DNS 决定进哪扇门 |
+| **rebind 保护** | `rebind_protection=1` 默认丢弃"域名→内网 IP"应答；配 `rebind_domain='hunau.edu.cn'` |
+| **uci 配置不落地** | uci add_list 的 server/address 没进生成的 dnsmasq.conf（ujail 启动的版本）；改写 /etc/dnsmasq.conf，并用"看生成文件"验证 |
+| **gzip 压缩页** | 浏览器头导致 SSO 返回 gzip，urllib 不自动解压 → sig_request 正则失配。fetch 加 `_decode_body` 按 Content-Encoding 解压 |
+| 排查顺序 | 配置怎么改都不生效时：① 看生成配置 ② 看 hosts ③ 直接问上游 `nslookup domain 10.10.10.10` ④ 抓原始响应头与前几字节（gzip 魔数 `\x1f\x8b`） |
+
+## 3.4 掉线探测
+
+| 坑 | 说明 / 解法 |
+|----|------|
+| 单 ping 误报 | 单个 ping 包丢包就触发认证（日志里 21/23 次是误报）→ 升级三目标，任一通即可 |
+| ping 通≠在线 | 校园网放 ICMP 但 HTTP 劫持 → is_online 必须 ping + wget 百度不见 eportal 才算 |
+| 探测目标选择 | 8.8.8.8 部分网不稳、119.29.29.29 实测不可达；定 223.5.5.5 / 180.76.76.76 / 8.8.8.8 |
+| 误报留痕 | ping 误判触发、eportal 回 already online 的记录原样显示，便于观察 |
+
+## 3.5 日志 / 存储 / cron
+
+- `/var/log`、`/tmp` 是 tmpfs，重启清空 → 认证日志必须放 `/root/auto_auth.log`
+- 日志要有大小上限，否则无限增长
+- **crontabs 目录为空时 crond 启动即退出**（无报错）：先建 `/etc/crontabs/root` 再 start
+- hotplug：脚本放 `/etc/hotplug.d/iface/`，变量 `$ACTION/$INTERFACE/$DEVICE`
+- SD 卡磨损：每 1~2 分钟写几十 KB，正常可用 5 年以上；`/root` 写满时服务不崩但数据停更
+- 所有落盘用原子写（tmp→replace），防断电半写损坏
+
+## 3.6 nftables
 
 | 坑 | 说明 |
 |----|------|
-| Step9 401 | 字段名应为 `signedCimsResponse` 而非 `sig_response`，动态解析 postArgument |
-| 加密明文 | 是 `password\|token`，不是 password；padding 是 PKCS1v1.5 |
-| sig_request 拆分 | 以 `:` 分 cims_sig / app_sig，两半前缀分别是 XD\| / APP\| |
-| iframe 会话 | Step 5 必须先访问 iframe，否则后续 API 无会话 |
-| 蜜罐字段 | hidden 的 username=aaaaaaa 要原样回传，真正账号在 API 里 |
-| 无 curl/tcpdump | ImmortalWrt 默认只有 wget/uclient-fetch，抓包用 Python 写 |
+| 纯 nft 系统 | 无 iptables |
+| `route` 链不支持 | 用 filter 类型挂 postrouting |
+| 花括号 | 整条规则引号包成一个参数 |
+| `fwd` 是保留字 | 链名换掉，报错很隐晦 |
+| 子命令静默失败 | 必须 `nft list table` 看实际内容，别只看返回码 |
+| nlbwmon | 与 offload/6.12 内核不兼容，改用命名计数器 |
+| 计数器负差 | 重启清零后差值为负 → 重置基线、跳过该轮，不污染累计 |
 
-## 3.3 日志 / 存储类
-
-- `/var/log`、`/tmp` 都是 **tmpfs（内存盘），重启清空**
-- 认证日志必须放 `/root/auto_auth.log`（overlay 持久层）
-- 长期运行要加日志大小限制，否则无限增长
-
-## 3.4 cron 类
-
-### crontabs 目录为空时 crond 不启动
-- `/etc/init.d/cron` 的 start_service：`[ -z "$(ls /etc/crontabs/)" ] && return 1`
-- 现象：start 无报错但进程不存在
-- 修复：**先建 `/etc/crontabs/root` 文件，再 start**
-
-### hotplug 机制
-- 脚本放 `/etc/hotplug.d/iface/`，变量：`$ACTION`、`$INTERFACE`、`$DEVICE`
-- procd 以 source 方式调用，不强制要 +x（加上更稳）；文件在 /etc 持久层
-
-## 3.5 nftables 类
+## 3.7 Python / I2C
 
 | 坑 | 说明 |
 |----|------|
-| 系统是纯 nft | 无 iptables 命令，规则用 nft 写 |
-| `route` 链不支持 | 报 "Chain of type route is not supported"，改用 **filter** 类型挂 postrouting |
-| 花括号被本地 shell 吞 | 含 `{ }` 的整条 nft 规则用引号包成一个参数：`nft 'add chain ... { ... }'` |
-| 独立表更稳 | TTL 规则放单独表 `ip ttlfix`，fw4 reload 时不会被清掉 |
-| `fwd` 是链名保留字 | `nft add chain inet x fwd` 报 syntax error，换名字（如 `acct`）即可，报错很隐晦 |
-| nft 子命令静默失败 | 脚本里 nft 报错只写 stderr，OLED 守护进程曾因链没建成而"看起来正常"；排查用 `nft list table` 看实际生效内容 |
-| nlbwmon 与 offload 不兼容 | 开 flow_offloading 后 conntrack 字节恒 0，nlbwmon 永远空表；关掉 offload 后其 netlink 通道在 6.12 内核仍不产数据，最终改用自建命名计数器 |
+| 硬编码偏移 | `up_`（3 字符）/`down_`（5 字符）统一 `[3:]` 产生脏键 → fromhex 抛错被 except 吞成静默死循环。按前缀分支；守护进程异常不能全吞 |
+| `tr ... > f` 自截断 | 重定向先清空文件，必须输出到另一文件再 mv |
+| I2C 假 ACK | 总线被拉低时扫任何地址都"有 ACK"；先确认空闲高电平 |
+| 全黑排查顺序 | 引脚号 → 供电 → 9 时钟脉冲解锁 → 显存分段测试 |
+| socket 挂属性 | 本环境 socket 对象不能加自定义属性，嗅探线程会启动即退 |
+| 字节序笔误 | 每个数据包解析失败，最不起眼最难查 |
+| bytes/str | 类型不统一会误判设备状态 |
 
-## 3.7 Python / I2C 类
+## 3.8 无线
+
+- sta+AP 共存必崩（2.15），别反复试
+- BCM43455 不支持 WPA3/SAE，用 WPA2-PSK
+- 改无线配置务必先接显示器键盘；radio 一崩只能拔 SD 卡
+- 在线设备判定不能用 DHCP 租约文件（不准），用 `iw station dump`
+
+## 3.9 电源 / 关机
 
 | 坑 | 说明 |
 |----|------|
-| `name[3:]` 式硬编码偏移 | `up_` 是 3 字符、`down_` 是 5 字符，统一 `[3:]` 会留下 `n_xxx` 脏键 → 后续 `fromhex()` 抛 ValueError → 被 main 的 except 吞掉变成静默死循环。教训：解析要按前缀分支；守护进程的异常不能全吞，要留 stderr |
-| `tr -d '\r' < f > f` 自截断 | 重定向先清空文件，tr 读到空。必须输出到另一个文件再 mv |
-| I2C 总线假 ACK | 总线被拉低时扫描任何地址都"有 ACK"；先看 `i2cdetect` 前置条件（总线空闲电平应为高）再信结果 |
-| 屏幕全黑排查顺序 | ① 接线引脚号（看错排会全低电平）② 供电 ③ 9 时钟脉冲解锁总线 ④ 数据路径（强制全亮 vs 写显存分段测试） |
+| flag 文件缺失静默退出 | 早期版本靠 flag 控制启用，文件没建时脚本首行直接退出且无提示 → 已改为 crontab 行管理 |
+| 缺执行权限 | `-rw-r--r--` 时 ash 报 Permission denied → chmod +x |
+| 错过补跑连环关机 | 见 2.19；锁文件 + 时间窗双保险 |
+| 关机必须善后 | 先落全部数据、OLED 显已关机、双 sync，再 poweroff |
+| 无法软件定时开机 | 需 RTC 模块（GPIO3 闹钟）或智能插座 |
 
-## 3.8 无线类
+## 3.10 面板 / 图表
 
-- sta+AP 并发必崩（见 2.15），别反复尝试浪费时间
-- 树莓派 4B BCM43455 不支持 WPA3/SAE，连热点用 WPA2-PSK
-- 调试无线务必**先接好显示器键盘**，否则 radio 一崩只能拔 SD 卡
+| 坑 | 说明 / 解法 |
+|----|------|
+| 速率贴地"平线" | 动态范围大，线性坐标被压扁 → 速率类统一**对数坐标** |
+| Y 轴顶格 | 1-2-5 贴数据档位会导致图没填满 → 恢复整数量级取整 |
+| X 轴末标签裁切 | 末点超 82% 位置时改 `text-anchor:end` |
+| 两卡不等高 | 别用 align-items:start；恢复等高 + chartbox flex:1、svg height:100% |
+| 假流量点 | 变量用错产生 367MB/s 坏点 → 1Gbps 线速钳制 |
+| 5 秒台阶感 | 改 1s 采样 + 5s 滑动窗口平均 |
+| ujail 隔离 | dnsmasq 日志在 ujail 里取不出 → DNS 数据改用 raw socket 嗅探 |
+| 自身流量 | 统计要排除 cloudflared 隧道，否则混入设备账 |
+| 浏览器缓存 | 面板大改后 Ctrl+F5 强刷验收 |
+| 公网裸奔 | 面板映射公网必须套 Cloudflare Access |
 
 ---
 
@@ -624,98 +747,66 @@ nft list counters                                  # 原始计数器
 ## 4.1 复刻完成验证清单
 
 ```sh
-# 1. AP 在广播
-iw dev                          # 应看到 type AP、ssid HWIFI（phy0-ap0）
-
-# 2. 终端拿到 IP
-cat /tmp/dhcp.leases            # 应列出已接入客户端及 192.168.1.x
-
-# 3. 树莓派自身能上网
-ping -c 2 8.8.8.8
-
-# 4. 转发/NAT 生效：终端连上 HWIFI 后打开网页即可（人工验证）
-
-# 5. cron 在跑
-pgrep -af crond
-
-# 6. TTL 伪装在跑
-nft list table ip ttlfix        # 应有 ip ttl set 64 规则
-
-# 7. 掉线自愈（真实会话失效后查日志）
-grep 're-auth SUCCESS' /root/auto_auth.log
+iw dev                          # AP 在广播：type AP ssid HWIFI
+cat /tmp/dhcp.leases            # 终端拿到 192.168.1.x
+nslookup sso.hunau.edu.cn 127.0.0.1 | grep 10.8.9.35   # DNS 走对门
+wget -qO- http://www.baidu.com | grep -q eportal && echo OFF || echo ONLINE
+pgrep -af crond                 # cron 在跑
+nft list table ip ttlfix        # TTL 规则在
+/etc/init.d/oled status; /etc/init.d/monitorweb status # 两个服务在跑
+grep 're-auth SUCCESS' /root/auto_auth.log              # 自愈有成功记录
 ```
 
-## 4.2 日常运维命令
+浏览器验收（面板改动后）：展开/图表/列表/时间切换/刷新保持/收起/空态/390px 手机端/控制台零报错。
+
+## 4.2 日常运维
 
 ```sh
-# 看认证日志（最常用）
-tail -30 /root/auto_auth.log
-
-# 看接入的设备
-cat /tmp/dhcp.leases
-
-# 看当前路由
-ip route show
-
-# 手动触发一次认证（在线时静默退出）
-/root/auto_auth.py
-
-# 重启 WiFi（AP-only，约 20 秒恢复）
-wifi reload
+tail -30 /root/auto_auth.log          # 认证日志（最常用）
+cat /tmp/dhcp.leases                  # 在线设备
+ip route show                         # 路由
+/root/auto_auth.py                    # 手动认证（在线静默退出）
+cat /root/shutdown.log                # 关机记录
+wifi reload                           # 重启 AP（约 20s）
 ```
 
-从电脑控制：
-
-```powershell
-ssh root@192.168.1.1 "tail -20 /root/auto_auth.log"
-```
-
-## 4.3 故障排查手册
+## 4.3 故障排查
 
 | 症状 | 排查方向 |
 |------|---------|
-| 连着 HWIFI 但上不了网 | 先看 `/root/auto_auth.log` 是否 FAIL；再 `ip route`、ping 网关 |
-| WiFi 列表没有 HWIFI | 控制台 `iw dev` 看 AP 是否存在；`wifi reload` |
-| 终端获取不到 IP | 确认 AP 在 br-lan（`brctl show`）；dhcp.lan 是否 server |
-| 认证一直 FAIL step1 | eportal 没劫持，可能其实在线；检查是否已能上网 |
-| 认证 FAIL 在 step6/8 | sso 是否可达；账号状态；加密器是否仍 INTERNATIONAL |
-| 整台 radio 没反应 | 接显示器 `wifi reload`；不行则 SD 卡改 disabled（见坑 6） |
+| 连 HWIFI 上不了网 | auto_auth.log 是否 FAIL；ip route；ping 网关 |
+| 列表没有 HWIFI | `iw dev` 看 AP；wifi reload |
+| 终端拿不到 IP | AP 是否在 br-lan；dhcp.lan 是否 server |
+| FAIL step1 | eportal 没劫持，可能其实已在线 |
+| FAIL step3 status=200 | 历史上是 hosts 走错门；查 DNS 解析与 gzip |
+| FAIL step4 no sig_request | 90% 是 gzip 未解压；少数是服务器页面变体，稍后重试 |
+| FAIL step6/8 | SSO 可达性、账号状态、encryptor 是否 INTERNATIONAL |
+| 开机即被关机 | 立即删 crontab 关机行（2.19） |
+| radio 无反应 | 接显示器 wifi reload；不行拔 SD 卡改 disabled |
 
-## 4.4 保底方案（若 sso 无法走 eth0）
-
-存在一个尚未验证的假设：**未认证状态下 sso 能否直接经 eth0 访问**（逻辑上应该可以——sso 是学校登录服务器，未认证时必须可达；本项目当前已让它走 eth0）。
-
-若将来真实掉线后日志显示认证失败（卡在访问 sso），启用保底脚本：
-
-- 每天凌晨（如 4:00）自动执行：关 AP → 启 sta（连热点）→ 跑认证 → 关 sta → 开 AP
-- 全自动，仅凌晨断网 1~2 分钟
-- 或更稳妥：购置 USB WiFi 棒做独立 sta（约 10-20 元）
-
-## 4.5 仓库文件清单
+## 4.4 部署文件与运行时数据对照
 
 | 仓库路径 | 部署位置 | 说明 |
 |---------|---------|------|
-| src/auto_auth.py | 树莓派 `/root/` | 认证主程序（生产版） |
-| src/auto_auth.conf.example | 树莓派 `/root/auto_auth.conf` | 账号配置模板（复制后填真实信息） |
-| src/crontab-root | 树莓派 `/etc/crontabs/root` | cron 配置 |
-| src/hotplug-routes.sh | 树莓派 `/etc/hotplug.d/iface/99-routes` | 路由持久化 |
-| src/firewall.ttl.sh | 树莓派 `/etc/firewall.ttl.sh` | TTL 伪装脚本 |
-| src/verify_ttl.py | 树莓派 `/tmp/` | TTL 伪装验证脚本 |
-| src/oled_status.py | 树莓派 `/root/oled_status.py` | OLED 状态屏守护进程 + 按设备流量记账 |
-| tools/probe.py ~ probe3.py | 不部署 | 逆向调试版（11 步 + 诊断输出） |
-| tools/probe_logout.py、test_eth0_sso.py | 不部署 | 下线/链路探测实验脚本 |
-| reference/CIMS.js 等 JS | 不部署 | 逆向用前端源码（证据留存） |
-| reference/post.html、login.html、cims_login.html | 不部署 | 抓取的认证页面（含 CIMS.init） |
+| src/auto_auth.py | /root/auto_auth.py | 认证主程序 |
+| src/auto_auth.conf.example | /root/auto_auth.conf | 账号模板（conf 不入库） |
+| src/crontab-root | /etc/crontabs/root | cron |
+| src/do_shutdown.py | /root/do_shutdown.py | 关机善后 |
+| src/monitor_web.py | /root/monitor_web.py | 面板后端 |
+| src/monitor.html | /root/monitor.html | 面板前端 |
+| src/oled_status.py | /root/oled_status.py | OLED + 设备记账 |
+| src/hotplug-routes.sh | /etc/hotplug.d/iface/99-routes | 路由持久化（wwan 分支已废弃） |
+| src/firewall.ttl.sh | /etc/firewall.ttl.sh | TTL 伪装 |
+| src/verify_ttl.py | /tmp/ | TTL 验证 |
 
-运行后产生的 `auto_auth.log` 在树莓派 `/root/`（持久化）。
+运行时数据（均在 /root，断电最多丢一个写入周期）：auto_auth.log、shutdown.log、.oled_state、traffic_state.json、traffic_hist.json、device_seen.json、traffic_dest.json、temp30_hist.json、traffic_log/*.txt。
 
----
+## 4.5 核心结论
 
-## 4.6 核心结论
-
-1. **纯 Python 逆向 CIMS API 自动认证完全可行**，11 步链路稳定，真实掉线 3 秒内自动恢复
-2. **AP-only 热点模式稳定可靠**，三终端实测正常上网，NAT 后校园网只见一个身份
-3. **板载 WiFi 的 sta+AP 并发不可用**（BCM43455 固件缺陷），需要并发就上 USB WiFi 棒
-4. **TTL 伪装**可封堵最常用的防私接检测
-5. **OLED 状态屏 + nft 命名计数器按设备记账**：不依赖 nlbwmon（与 offload 不兼容），流量走软转发，状态持久化可跨重启
-6. 整套方案零额外硬件（OLED 屏为可选扩展）、零人工干预、重启自恢复，适合同类高校锐捷/Portal + CIMS 环境参考
+1. **纯 Python 逆向 CIMS API 完全可行**，11 步链路稳定，掉线 1 分钟内自动恢复
+2. **"SSO 被 MITM"是走错门的结果**：走校园 DNS → 校内 10.8.9.35 即与电脑弹窗同路，无需任何额外设备
+3. **AP-only 热点稳定**，NAT 后校园网只见一个身份；sta+AP 并发受 BCM43455 固件所限不可用
+4. **TTL 伪装**封堵最常用的防私接检测
+5. **监控面板 + OLED + nft 计数器**构成完整可观测体系，数据持久化、跨重启不丢
+6. 关机要做好善后并防 cron 补跑；定时开机需外部 RTC / 智能插座
+7. 整套方案零额外硬件（面板/OLED 除外）、零人工干预、重启自恢复，适合同类锐捷 Portal + CIMS 高校参考
